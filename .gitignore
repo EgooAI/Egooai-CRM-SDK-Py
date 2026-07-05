@@ -9,3 +9,5 @@ interface.md
 sql.yml
 
 db.sqlite
+
+__pycache__/
