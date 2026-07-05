@@ -33,13 +33,16 @@ class SessionChatManagerTestCase(unittest.TestCase):
             read=None,
         )
 
-    def _build_session_meta(self, name: str = "session-a") -> SessionMeta:
+    def _build_session_meta(self, name: str = "session-a", chatid: str | None = None) -> SessionMeta:
         return SessionMeta(
             name=name,
+            chatid=chatid if chatid is not None else SessionMeta().chatid,
             participants=[1, 2],
         )
 
     def test_add_session_chat_auto_creates_target_table(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
         chat = self._build_session_chat()
 
         self.manager.add_session_chat(self.alpha_chatid, chat)
@@ -62,6 +65,8 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertIn(resolve_session_chat_table_name(self.alpha_chatid), tables)
 
     def test_get_session_chat_returns_inserted_record(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
         chat = self._build_session_chat()
         self.manager.add_session_chat(self.alpha_chatid, chat)
 
@@ -75,9 +80,14 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertIsNone(saved_chat.read)
 
     def test_get_session_chat_returns_none_when_missing(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
+
         self.assertIsNone(self.manager.get_session_chat(self.alpha_chatid, 9999))
 
     def test_list_session_chat_returns_all_records_in_id_order(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
         first = self._build_session_chat(sender=1, type_="text")
         second = SessionChat(
             sender=2,
@@ -95,6 +105,8 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertEqual([chat.type for chat in chats], ["text", "image"])
 
     def test_edit_session_chat_updates_fields(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
         chat = self._build_session_chat()
         self.manager.add_session_chat(self.alpha_chatid, chat)
         original_created_time = chat.created_time
@@ -131,6 +143,8 @@ class SessionChatManagerTestCase(unittest.TestCase):
             self.manager.edit_session_chat(self.alpha_chatid, 404, updated_chat)
 
     def test_delete_session_chat_removes_record(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
         chat = self._build_session_chat()
         self.manager.add_session_chat(self.alpha_chatid, chat)
 
@@ -140,10 +154,17 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertEqual(self.manager.list_session_chat(self.alpha_chatid), [])
 
     def test_delete_session_chat_missing_is_no_op(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
+
         self.manager.delete_session_chat(self.alpha_chatid, 404)
         self.assertEqual(self.manager.list_session_chat(self.alpha_chatid), [])
 
     def test_different_chatids_keep_records_isolated(self) -> None:
+        alpha_meta = self._build_session_meta(name="session-alpha", chatid=self.alpha_chatid)
+        beta_meta = self._build_session_meta(name="session-beta", chatid=self.beta_chatid)
+        self.session_meta_manager.add_session_meta(alpha_meta)
+        self.session_meta_manager.add_session_meta(beta_meta)
         alpha_chat = self._build_session_chat(sender=1)
         beta_chat = SessionChat(
             sender=2,
@@ -162,6 +183,9 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertEqual([chat.content for chat in beta_chats], [{"text": "beta"}])
 
     def test_ensure_session_chat_table_is_idempotent(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
+
         first_name = self.manager.ensure_session_chat_table(self.alpha_chatid)
         second_name = self.manager.ensure_session_chat_table(self.alpha_chatid)
 
@@ -180,6 +204,37 @@ class SessionChatManagerTestCase(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             self.manager.ensure_session_chat_table("123")
+
+    def test_orphan_chatid_raises_and_does_not_recreate_table(self) -> None:
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
+        self.session_meta_manager.delete_session_meta(session_meta.sid)
+        table_name = resolve_session_chat_table_name(self.alpha_chatid)
+
+        with self.assertRaises(ValueError):
+            self.manager.ensure_session_chat_table(self.alpha_chatid)
+
+        with self.assertRaises(ValueError):
+            self.manager.list_session_chat(self.alpha_chatid)
+
+        with self.assertRaises(ValueError):
+            self.manager.get_session_chat(self.alpha_chatid, 1)
+
+        with self.assertRaises(ValueError):
+            self.manager.add_session_chat(self.alpha_chatid, self._build_session_chat())
+
+        connection = sqlite3.connect(self.db_path)
+        try:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+        finally:
+            connection.close()
+
+        self.assertNotIn(table_name, tables)
 
     def test_add_session_chat_by_sid_routes_to_session_chat_table(self) -> None:
         session_meta = self._build_session_meta()

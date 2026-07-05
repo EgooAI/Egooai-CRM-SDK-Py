@@ -2,6 +2,7 @@ import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from core import SessionMetaManager
 from models import SessionMeta
@@ -171,6 +172,20 @@ class SessionMetaManagerTestCase(unittest.TestCase):
     def test_delete_session_meta_missing_is_no_op(self) -> None:
         self.manager.delete_session_meta(404)
         self.assertEqual(self.manager.list_session_meta(), [])
+
+    def test_delete_session_meta_keeps_metadata_when_drop_fails(self) -> None:
+        session_meta = self._build_session_meta()
+        self.manager.add_session_meta(session_meta)
+
+        with patch("core.SessionMeta.get_session_chat_table") as mock_get_table:
+            mock_table = mock_get_table.return_value
+            mock_table.drop.side_effect = RuntimeError("drop failed")
+
+            with self.assertRaises(RuntimeError):
+                self.manager.delete_session_meta(session_meta.sid)
+
+        saved_session_meta = self.manager.get_session_meta(session_meta.sid)
+        self.assertIsNotNone(saved_session_meta)
 
 
 if __name__ == "__main__":

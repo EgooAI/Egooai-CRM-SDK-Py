@@ -6,7 +6,12 @@ from sqlmodel import Session, select
 
 from models import SessionMeta
 from models.Customer import utc_now
-from models.SessionChat import generate_session_chatid, get_session_chat_table, normalize_session_chatid
+from models.SessionChat import (
+    generate_session_chatid,
+    get_session_chat_table,
+    normalize_session_chatid,
+    remove_session_chat_table,
+)
 
 from . import bootstrap_engine
 
@@ -39,16 +44,22 @@ class SessionMetaManager:
 
     def delete_session_meta(self, sid: int) -> None:
         """按主键删除会话元数据，并同步删除对应的聊天表。"""
+        session_chat_table = None
+        chatid = None
+
         with Session(self.engine) as session:
             session_meta = session.get(SessionMeta, sid)
             if session_meta is None:
                 return
 
-            session_chat_table = get_session_chat_table(session_meta.chatid)
+            chatid = session_meta.chatid
+            session_chat_table = get_session_chat_table(chatid)
+            session_chat_table.drop(session.connection(), checkfirst=True)
             session.delete(session_meta)
             session.commit()
 
-        session_chat_table.drop(self.engine, checkfirst=True)
+        if chatid is not None:
+            remove_session_chat_table(chatid)
 
     def edit_session_meta(self, sid: int, session_meta: SessionMeta) -> None:
         """按主键更新已有会话元数据的可编辑字段，并刷新更新时间。"""

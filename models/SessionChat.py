@@ -56,10 +56,18 @@ def get_session_chat_table(chatid: str) -> Table:
     )
 
 
+def remove_session_chat_table(chatid: str) -> None:
+    physical_table_name = resolve_session_chat_table_name(chatid)
+    existing_table = SQLModel.metadata.tables.get(physical_table_name)
+    if existing_table is not None:
+        SQLModel.metadata.remove(existing_table)
+
+
 __all__ = [
     "SessionChat",
     "generate_session_chatid",
     "normalize_session_chatid",
     "resolve_session_chat_table_name",
     "get_session_chat_table",
+    "remove_session_chat_table",
 ]

@@ -2,11 +2,11 @@ from datetime import timezone
 from pathlib import Path
 from typing import Optional
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from models import SessionChat, SessionMeta
 from models.Customer import utc_now
-from models.SessionChat import get_session_chat_table
+from models.SessionChat import get_session_chat_table, normalize_session_chatid
 
 from . import bootstrap_engine
 
@@ -20,13 +20,15 @@ class SessionChatManager:
 
     def ensure_session_chat_table(self, chatid: str) -> str:
         """确保指定 chatid 对应的聊天表存在，并返回物理表名。"""
-        session_chat_table = get_session_chat_table(chatid)
+        normalized_chatid = self._ensure_live_chatid(chatid)
+        session_chat_table = get_session_chat_table(normalized_chatid)
         session_chat_table.create(self.engine, checkfirst=True)
         return session_chat_table.name
 
     def add_session_chat(self, chatid: str, chat: SessionChat) -> None:
         """向指定聊天表新增一条消息，并回填数据库生成的字段。"""
-        session_chat_table = get_session_chat_table(chatid)
+        normalized_chatid = self._ensure_live_chatid(chatid)
+        session_chat_table = get_session_chat_table(normalized_chatid)
         session_chat_table.create(self.engine, checkfirst=True)
 
         payload = {
@@ -50,7 +52,8 @@ class SessionChatManager:
 
     def delete_session_chat(self, chatid: str, chat_id: int) -> None:
         """按主键删除指定聊天表中的消息；如果记录不存在则直接返回。"""
-        session_chat_table = get_session_chat_table(chatid)
+        normalized_chatid = self._ensure_live_chatid(chatid)
+        session_chat_table = get_session_chat_table(normalized_chatid)
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
@@ -70,7 +73,8 @@ class SessionChatManager:
 
     def edit_session_chat(self, chatid: str, chat_id: int, chat: SessionChat) -> None:
         """按主键更新指定聊天表中的消息字段，并刷新更新时间。"""
-        session_chat_table = get_session_chat_table(chatid)
+        normalized_chatid = self._ensure_live_chatid(chatid)
+        session_chat_table = get_session_chat_table(normalized_chatid)
         session_chat_table.create(self.engine, checkfirst=True)
 
         updated_time = utc_now()
@@ -103,7 +107,8 @@ class SessionChatManager:
 
     def get_session_chat(self, chatid: str, chat_id: int) -> Optional[SessionChat]:
         """按主键查询指定聊天表中的消息，不存在时返回 None。"""
-        session_chat_table = get_session_chat_table(chatid)
+        normalized_chatid = self._ensure_live_chatid(chatid)
+        session_chat_table = get_session_chat_table(normalized_chatid)
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
@@ -121,7 +126,8 @@ class SessionChatManager:
 
     def list_session_chat(self, chatid: str) -> list[SessionChat]:
         """查询并返回指定聊天表中的全部消息，结果按 id 升序排列。"""
-        session_chat_table = get_session_chat_table(chatid)
+        normalized_chatid = self._ensure_live_chatid(chatid)
+        session_chat_table = get_session_chat_table(normalized_chatid)
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
@@ -132,6 +138,15 @@ class SessionChatManager:
         """按 sid 定位会话后，查询对应聊天表中的全部消息。"""
         chatid = self._get_chatid_by_sid(sid)
         return self.list_session_chat(chatid)
+
+    def _ensure_live_chatid(self, chatid: str) -> str:
+        normalized_chatid = normalize_session_chatid(chatid)
+        with Session(self.engine) as session:
+            statement = select(SessionMeta).where(SessionMeta.chatid == normalized_chatid)
+            session_meta = session.exec(statement).first()
+            if session_meta is None:
+                raise ValueError(f"SessionMeta with chatid {normalized_chatid} not found")
+        return normalized_chatid
 
     def _get_chatid_by_sid(self, sid: int) -> str:
         with Session(self.engine) as session:
