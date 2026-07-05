@@ -27,6 +27,7 @@ class AccountManagerTestCase(unittest.TestCase):
             account=account,
             nickname="Alice",
             avatar="alice.png",
+            sids=[1, 2],
             extra={"level": 1},
         )
 
@@ -62,6 +63,7 @@ class AccountManagerTestCase(unittest.TestCase):
             account="test.user@egooai.com",
             nickname="Test User",
             avatar="test-user.png",
+            sids=[100, 200, 300],
             extra={"source": "test", "status": "active"},
         )
 
@@ -75,6 +77,7 @@ class AccountManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_account.account, "test.user@egooai.com")
         self.assertEqual(saved_account.nickname, "Test User")
         self.assertEqual(saved_account.avatar, "test-user.png")
+        self.assertEqual(saved_account.sids, [100, 200, 300])
         self.assertEqual(saved_account.extra, {"source": "test", "status": "active"})
 
     def test_get_account_returns_inserted_account(self) -> None:
@@ -87,6 +90,7 @@ class AccountManagerTestCase(unittest.TestCase):
         assert saved_account is not None
         self.assertEqual(saved_account.account, "alice@example.com")
         self.assertEqual(saved_account.nickname, "Alice")
+        self.assertEqual(saved_account.sids, [1, 2])
         self.assertEqual(saved_account.extra, {"level": 1})
 
     def test_get_account_returns_none_when_missing(self) -> None:
@@ -100,6 +104,7 @@ class AccountManagerTestCase(unittest.TestCase):
             account="bella@example.com",
             nickname="Bella",
             avatar="bella.png",
+            sids=[3, 4],
             extra={"level": 2},
         )
 
@@ -123,6 +128,7 @@ class AccountManagerTestCase(unittest.TestCase):
             account="alice-updated@example.com",
             nickname="Alice Zhang",
             avatar="updated.png",
+            sids=[8, 9],
             extra={"level": 5},
         )
 
@@ -136,6 +142,7 @@ class AccountManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_account.account, "alice-updated@example.com")
         self.assertEqual(saved_account.nickname, "Alice Zhang")
         self.assertEqual(saved_account.avatar, "updated.png")
+        self.assertEqual(saved_account.sids, [8, 9])
         self.assertEqual(saved_account.extra, {"level": 5})
         self.assertEqual(saved_account.created_time, original_created_time)
         self.assertGreaterEqual(saved_account.updated_time, original_updated_time)
@@ -147,6 +154,7 @@ class AccountManagerTestCase(unittest.TestCase):
             account="ghost@example.com",
             nickname="Ghost",
             avatar="ghost.png",
+            sids=[0],
             extra={"level": 0},
         )
 

@@ -45,6 +45,7 @@ class AccountManager:
             current_account.account = account.account
             current_account.nickname = account.nickname
             current_account.avatar = account.avatar
+            current_account.sids = account.sids
             current_account.extra = account.extra
             current_account.updated_time = utc_now()
 

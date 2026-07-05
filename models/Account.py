@@ -14,6 +14,7 @@ class Account(SQLModel, table=True):
     account: str
     nickname: str
     avatar: str
+    sids: Optional[list[int]] = Field(default=None, sa_column=Column(JSON))
     extra: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     created_time: datetime = Field(default_factory=utc_now)
     updated_time: datetime = Field(

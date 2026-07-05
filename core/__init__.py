@@ -58,5 +58,14 @@ def bootstrap_engine(config_path: Optional[Path | str] = None):
 from .Account import AccountManager
 from .Customer import CustomerManager
 from .Platform import PlatformManager
+from .SessionChat import SessionChatManager
+from .SessionMeta import SessionMetaManager
 
-__all__ = ["CustomerManager", "AccountManager", "PlatformManager", "bootstrap_engine"]
+__all__ = [
+    "CustomerManager",
+    "AccountManager",
+    "PlatformManager",
+    "SessionChatManager",
+    "SessionMetaManager",
+    "bootstrap_engine",
+]
