@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import CustomerManager
+from core import CustomerManager, bootstrap_engine
 from models import Customer
 
 
@@ -135,6 +135,33 @@ class CustomerManagerTestCase(unittest.TestCase):
     def test_delete_customer_missing_is_no_op(self) -> None:
         self.manager.delete_customer(404)
         self.assertEqual(self.manager.list_customer(), [])
+
+    def test_bootstrap_engine_raises_when_config_missing(self) -> None:
+        missing_config = self.temp_path / "missing.yml"
+
+        with self.assertRaises(FileNotFoundError):
+            bootstrap_engine(missing_config)
+
+    def test_bootstrap_engine_raises_when_type_is_not_sqlite(self) -> None:
+        invalid_config = self.temp_path / "invalid.yml"
+        invalid_config.write_text("type: mysql\npath: ./customer.sqlite\n", encoding="utf-8")
+
+        with self.assertRaises(ValueError):
+            bootstrap_engine(invalid_config)
+
+    def test_bootstrap_engine_resolves_relative_database_path(self) -> None:
+        nested_dir = self.temp_path / "config"
+        nested_dir.mkdir()
+        nested_config = nested_dir / "sql.yml"
+        nested_config.write_text("type: sqlite\npath: ./nested/customer.sqlite\n", encoding="utf-8")
+
+        config_path, database_path, engine = bootstrap_engine(nested_config)
+        try:
+            self.assertEqual(config_path, nested_config.resolve())
+            self.assertEqual(database_path, (nested_dir / "nested" / "customer.sqlite").resolve())
+            self.assertTrue(database_path.exists())
+        finally:
+            engine.dispose()
 
 
 if __name__ == "__main__":
