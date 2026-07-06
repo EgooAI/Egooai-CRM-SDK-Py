@@ -60,6 +60,8 @@ from .Customer import CustomerManager
 from .Platform import PlatformManager
 from .SessionChat import SessionChatManager
 from .SessionMeta import SessionMetaManager
+from .Translate import TranslateManager
+from .Version import VersionManager
 
 __all__ = [
     "CustomerManager",
@@ -67,5 +69,7 @@ __all__ = [
     "PlatformManager",
     "SessionChatManager",
     "SessionMetaManager",
+    "TranslateManager",
+    "VersionManager",
     "bootstrap_engine",
 ]
