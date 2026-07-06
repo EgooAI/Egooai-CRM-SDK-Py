@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from models import SessionMeta
-from models.Customer import utc_now
-from models.SessionChat import (
+from models.customer import utc_now
+from models.session_chat import (
     generate_session_chatid,
     get_session_chat_table,
     normalize_session_chatid,
@@ -19,9 +19,9 @@ from . import bootstrap_engine
 class SessionMetaManager:
     """负责 SessionMeta 表的连接初始化与增删改查操作。"""
 
-    def __init__(self, config_path: Optional[Path | str] = None) -> None:
-        """读取数据库配置、创建 engine，并在表缺失时自动建表。"""
-        self.config_path, self.database_path, self.engine = bootstrap_engine(config_path)
+    def __init__(self, database_path: Optional[Path | str] = None) -> None:
+        """读取数据库路径、创建 engine，并在表缺失时自动建表。"""
+        self.database_path, self.engine = bootstrap_engine(database_path)
 
     def add_session_meta(self, session_meta: SessionMeta) -> None:
         """向 SessionMeta 表新增一条会话元数据记录，并回填数据库生成的字段。"""

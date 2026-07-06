@@ -4,11 +4,11 @@ from typing import Any, Dict, Optional
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
-from .Customer import utc_now
+from .customer import utc_now
 
 
 class Platform(SQLModel, table=True):
-    pid: Optional[str] = Field(default=None, primary_key=True)
+    pid: str = Field(primary_key=True)
     name: str
     extra: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     created_time: datetime = Field(default_factory=utc_now)

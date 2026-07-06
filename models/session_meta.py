@@ -4,15 +4,15 @@ from typing import Optional
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
-from .Customer import utc_now
-from .SessionChat import generate_session_chatid
+from .customer import utc_now
+from .session_chat import generate_session_chatid
 
 
 class SessionMeta(SQLModel, table=True):
     sid: Optional[int] = Field(default=None, primary_key=True)
-    name: str
+    name: Optional[str] = Field(default=None)
     chatid: str = Field(default_factory=generate_session_chatid, index=True, unique=True)
-    participants: Optional[list[int]] = Field(default=None, sa_column=Column(JSON))
+    participants: list[int] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     created_time: datetime = Field(default_factory=utc_now)
     updated_time: datetime = Field(
         default_factory=utc_now,

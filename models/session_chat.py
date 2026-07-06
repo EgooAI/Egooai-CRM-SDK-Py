@@ -3,10 +3,10 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, Table
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlmodel import Field, SQLModel
 
-from .Customer import utc_now
+from .customer import utc_now
 
 _SESSION_CHAT_TABLE_PREFIX = "sessionchat_"
 _SESSION_CHATID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
@@ -47,7 +47,7 @@ def get_session_chat_table(chatid: str) -> Table:
         physical_table_name,
         SQLModel.metadata,
         Column("id", Integer, primary_key=True),
-        Column("sender", Integer, nullable=False),
+        Column("sender", Integer, ForeignKey("account.aid"), nullable=False),
         Column("type", String, nullable=False),
         Column("content", JSON, nullable=False),
         Column("read", Boolean, nullable=True),

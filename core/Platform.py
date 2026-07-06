@@ -3,8 +3,8 @@ from typing import Optional
 
 from sqlmodel import Session, select
 
-from models.Platform import Platform
-from models.Customer import utc_now
+from models.platform import Platform
+from models.customer import utc_now
 
 from . import bootstrap_engine
 
@@ -12,9 +12,9 @@ from . import bootstrap_engine
 class PlatformManager:
     """负责 Platform 表的连接初始化与增删改查操作。"""
 
-    def __init__(self, config_path: Optional[Path | str] = None) -> None:
-        """读取数据库配置、创建 engine，并在表缺失时自动建表。"""
-        self.config_path, self.database_path, self.engine = bootstrap_engine(config_path)
+    def __init__(self, database_path: Optional[Path | str] = None) -> None:
+        """读取数据库路径、创建 engine，并在表缺失时自动建表。"""
+        self.database_path, self.engine = bootstrap_engine(database_path)
 
     def add_platform(self, platform: Platform) -> None:
         """向 Platform 表新增一条平台记录，并回填数据库生成的字段。"""

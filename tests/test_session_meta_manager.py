@@ -6,17 +6,15 @@ from unittest.mock import patch
 
 from core import SessionMetaManager
 from models import SessionMeta
-from models.SessionChat import resolve_session_chat_table_name
+from models.session_chat import resolve_session_chat_table_name
 
 
 class SessionMetaManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
-        self.config_path = self.temp_path / "sql.yml"
         self.db_path = self.temp_path / "session_meta.sqlite"
-        self.config_path.write_text("type: sqlite\npath: ./session_meta.sqlite\n", encoding="utf-8")
-        self.manager = SessionMetaManager(config_path=self.config_path)
+        self.manager = SessionMetaManager(database_path=self.db_path)
 
     def tearDown(self) -> None:
         self.manager.engine.dispose()
@@ -86,6 +84,17 @@ class SessionMetaManagerTestCase(unittest.TestCase):
 
     def test_get_session_meta_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_session_meta(9999))
+
+    def test_add_session_meta_defaults_participants_to_empty_list(self) -> None:
+        session_meta = SessionMeta(name=None)
+
+        self.manager.add_session_meta(session_meta)
+        saved_session_meta = self.manager.get_session_meta(session_meta.sid)
+
+        self.assertIsNotNone(saved_session_meta)
+        assert saved_session_meta is not None
+        self.assertEqual(saved_session_meta.participants, [])
+        self.assertIsNone(saved_session_meta.name)
 
     def test_list_session_meta_returns_all_records_in_sid_order(self) -> None:
         first = self._build_session_meta(name="session-a")
@@ -177,7 +186,7 @@ class SessionMetaManagerTestCase(unittest.TestCase):
         session_meta = self._build_session_meta()
         self.manager.add_session_meta(session_meta)
 
-        with patch("core.SessionMeta.get_session_chat_table") as mock_get_table:
+        with patch("core.session_meta.get_session_chat_table") as mock_get_table:
             mock_table = mock_get_table.return_value
             mock_table.drop.side_effect = RuntimeError("drop failed")
 

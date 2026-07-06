@@ -3,26 +3,28 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import SessionChatManager, SessionMetaManager
-from models import SessionChat, SessionMeta
-from models.SessionChat import resolve_session_chat_table_name
+from sqlalchemy.exc import IntegrityError
+
+from core import AccountManager, SessionChatManager, SessionMetaManager
+from models import Account, SessionChat, SessionMeta
+from models.session_chat import resolve_session_chat_table_name
 
 
 class SessionChatManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
-        self.config_path = self.temp_path / "sql.yml"
         self.db_path = self.temp_path / "session_chat.sqlite"
-        self.config_path.write_text("type: sqlite\npath: ./session_chat.sqlite\n", encoding="utf-8")
-        self.manager = SessionChatManager(config_path=self.config_path)
-        self.session_meta_manager = SessionMetaManager(config_path=self.config_path)
+        self.manager = SessionChatManager(database_path=self.db_path)
+        self.session_meta_manager = SessionMetaManager(database_path=self.db_path)
+        self.account_manager = AccountManager(database_path=self.db_path)
         self.alpha_chatid = "0123456789abcdef0123456789abcdef"
         self.beta_chatid = "fedcba9876543210fedcba9876543210"
 
     def tearDown(self) -> None:
         self.manager.engine.dispose()
         self.session_meta_manager.engine.dispose()
+        self.account_manager.engine.dispose()
         self.temp_dir.cleanup()
 
     def _build_session_chat(self, sender: int = 1001, type_: str = "text") -> SessionChat:
@@ -33,6 +35,11 @@ class SessionChatManagerTestCase(unittest.TestCase):
             read=None,
         )
 
+    def _add_account(self, aid_seed: str = "alice@example.com") -> Account:
+        account = Account(account=aid_seed)
+        self.account_manager.add_account(account)
+        return account
+
     def _build_session_meta(self, name: str = "session-a", chatid: str | None = None) -> SessionMeta:
         return SessionMeta(
             name=name,
@@ -41,9 +48,10 @@ class SessionChatManagerTestCase(unittest.TestCase):
         )
 
     def test_add_session_chat_auto_creates_target_table(self) -> None:
+        account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
-        chat = self._build_session_chat()
+        chat = self._build_session_chat(sender=account.aid)
 
         self.manager.add_session_chat(self.alpha_chatid, chat)
 
@@ -64,20 +72,13 @@ class SessionChatManagerTestCase(unittest.TestCase):
 
         self.assertIn(resolve_session_chat_table_name(self.alpha_chatid), tables)
 
-    def test_get_session_chat_returns_inserted_record(self) -> None:
+    def test_add_session_chat_enforces_sender_foreign_key(self) -> None:
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
-        chat = self._build_session_chat()
-        self.manager.add_session_chat(self.alpha_chatid, chat)
+        chat = self._build_session_chat(sender=9999)
 
-        saved_chat = self.manager.get_session_chat(self.alpha_chatid, chat.id)
-
-        self.assertIsNotNone(saved_chat)
-        assert saved_chat is not None
-        self.assertEqual(saved_chat.sender, 1001)
-        self.assertEqual(saved_chat.type, "text")
-        self.assertEqual(saved_chat.content, {"text": "hello"})
-        self.assertIsNone(saved_chat.read)
+        with self.assertRaises(IntegrityError):
+            self.manager.add_session_chat(self.alpha_chatid, chat)
 
     def test_get_session_chat_returns_none_when_missing(self) -> None:
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
@@ -85,12 +86,30 @@ class SessionChatManagerTestCase(unittest.TestCase):
 
         self.assertIsNone(self.manager.get_session_chat(self.alpha_chatid, 9999))
 
-    def test_list_session_chat_returns_all_records_in_id_order(self) -> None:
+    def test_get_session_chat_returns_inserted_record(self) -> None:
+        account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
-        first = self._build_session_chat(sender=1, type_="text")
+        chat = self._build_session_chat(sender=account.aid)
+        self.manager.add_session_chat(self.alpha_chatid, chat)
+
+        saved_chat = self.manager.get_session_chat(self.alpha_chatid, chat.id)
+
+        self.assertIsNotNone(saved_chat)
+        assert saved_chat is not None
+        self.assertEqual(saved_chat.sender, account.aid)
+        self.assertEqual(saved_chat.type, "text")
+        self.assertEqual(saved_chat.content, {"text": "hello"})
+        self.assertIsNone(saved_chat.read)
+
+    def test_list_session_chat_returns_all_records_in_id_order(self) -> None:
+        account_one = self._add_account("first@example.com")
+        account_two = self._add_account("second@example.com")
+        session_meta = self._build_session_meta(chatid=self.alpha_chatid)
+        self.session_meta_manager.add_session_meta(session_meta)
+        first = self._build_session_chat(sender=account_one.aid, type_="text")
         second = SessionChat(
-            sender=2,
+            sender=account_two.aid,
             type="image",
             content={"url": "cover.png"},
             read=False,
@@ -105,15 +124,17 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertEqual([chat.type for chat in chats], ["text", "image"])
 
     def test_edit_session_chat_updates_fields(self) -> None:
+        account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
-        chat = self._build_session_chat()
+        chat = self._build_session_chat(sender=account.aid)
         self.manager.add_session_chat(self.alpha_chatid, chat)
         original_created_time = chat.created_time
         original_updated_time = chat.updated_time
 
+        replacement_account = self._add_account("replacement@example.com")
         updated_chat = SessionChat(
-            sender=2002,
+            sender=replacement_account.aid,
             type="card",
             content={"title": "updated"},
             read=True,
@@ -124,7 +145,7 @@ class SessionChatManagerTestCase(unittest.TestCase):
 
         self.assertIsNotNone(saved_chat)
         assert saved_chat is not None
-        self.assertEqual(saved_chat.sender, 2002)
+        self.assertEqual(saved_chat.sender, replacement_account.aid)
         self.assertEqual(saved_chat.type, "card")
         self.assertEqual(saved_chat.content, {"title": "updated"})
         self.assertTrue(saved_chat.read)
@@ -132,8 +153,9 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertGreaterEqual(saved_chat.updated_time, original_updated_time)
 
     def test_edit_session_chat_raises_when_missing(self) -> None:
+        account = self._add_account("ghost@example.com")
         updated_chat = SessionChat(
-            sender=1,
+            sender=account.aid,
             type="text",
             content={"text": "ghost"},
             read=False,
@@ -143,9 +165,10 @@ class SessionChatManagerTestCase(unittest.TestCase):
             self.manager.edit_session_chat(self.alpha_chatid, 404, updated_chat)
 
     def test_delete_session_chat_removes_record(self) -> None:
+        account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
-        chat = self._build_session_chat()
+        chat = self._build_session_chat(sender=account.aid)
         self.manager.add_session_chat(self.alpha_chatid, chat)
 
         self.manager.delete_session_chat(self.alpha_chatid, chat.id)
@@ -161,13 +184,15 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertEqual(self.manager.list_session_chat(self.alpha_chatid), [])
 
     def test_different_chatids_keep_records_isolated(self) -> None:
+        alpha_account = self._add_account("alpha@example.com")
+        beta_account = self._add_account("beta@example.com")
         alpha_meta = self._build_session_meta(name="session-alpha", chatid=self.alpha_chatid)
         beta_meta = self._build_session_meta(name="session-beta", chatid=self.beta_chatid)
         self.session_meta_manager.add_session_meta(alpha_meta)
         self.session_meta_manager.add_session_meta(beta_meta)
-        alpha_chat = self._build_session_chat(sender=1)
+        alpha_chat = self._build_session_chat(sender=alpha_account.aid)
         beta_chat = SessionChat(
-            sender=2,
+            sender=beta_account.aid,
             type="text",
             content={"text": "beta"},
             read=False,
@@ -237,9 +262,10 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertNotIn(table_name, tables)
 
     def test_add_session_chat_by_sid_routes_to_session_chat_table(self) -> None:
+        account = self._add_account()
         session_meta = self._build_session_meta()
         self.session_meta_manager.add_session_meta(session_meta)
-        chat = self._build_session_chat()
+        chat = self._build_session_chat(sender=account.aid)
 
         self.manager.add_session_chat_by_sid(session_meta.sid, chat)
         saved_chat = self.manager.get_session_chat(session_meta.chatid, chat.id)
@@ -249,11 +275,13 @@ class SessionChatManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_chat.content, {"text": "hello"})
 
     def test_list_session_chat_by_sid_returns_session_rows(self) -> None:
+        account_one = self._add_account("sid-first@example.com")
+        account_two = self._add_account("sid-second@example.com")
         session_meta = self._build_session_meta()
         self.session_meta_manager.add_session_meta(session_meta)
-        first = self._build_session_chat(sender=1)
+        first = self._build_session_chat(sender=account_one.aid)
         second = SessionChat(
-            sender=2,
+            sender=account_two.aid,
             type="image",
             content={"url": "cover.png"},
             read=False,
@@ -265,7 +293,7 @@ class SessionChatManagerTestCase(unittest.TestCase):
         chats = self.manager.list_session_chat_by_sid(session_meta.sid)
 
         self.assertEqual([chat.id for chat in chats], [first.id, second.id])
-        self.assertEqual([chat.sender for chat in chats], [1, 2])
+        self.assertEqual([chat.sender for chat in chats], [account_one.aid, account_two.aid])
 
     def test_sid_based_methods_raise_when_session_missing(self) -> None:
         chat = self._build_session_chat()

@@ -11,10 +11,8 @@ class PlatformManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
-        self.config_path = self.temp_path / "sql.yml"
         self.db_path = self.temp_path / "platform.sqlite"
-        self.config_path.write_text("type: sqlite\npath: ./platform.sqlite\n", encoding="utf-8")
-        self.manager = PlatformManager(config_path=self.config_path)
+        self.manager = PlatformManager(database_path=self.db_path)
 
     def tearDown(self) -> None:
         self.manager.engine.dispose()

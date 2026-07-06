@@ -3,27 +3,43 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import AccountManager
-from models import Account
+from sqlalchemy.exc import IntegrityError
+
+from core import AccountManager, CustomerManager, PlatformManager
+from models import Account, Customer, Platform
 
 
 class AccountManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
-        self.config_path = self.temp_path / "sql.yml"
         self.db_path = self.temp_path / "account.sqlite"
-        self.config_path.write_text("type: sqlite\npath: ./account.sqlite\n", encoding="utf-8")
-        self.manager = AccountManager(config_path=self.config_path)
+        self.manager = AccountManager(database_path=self.db_path)
+        self.customer_manager = CustomerManager(database_path=self.db_path)
+        self.platform_manager = PlatformManager(database_path=self.db_path)
 
     def tearDown(self) -> None:
         self.manager.engine.dispose()
+        self.customer_manager.engine.dispose()
+        self.platform_manager.engine.dispose()
         self.temp_dir.cleanup()
 
+    def _add_customer(self, name: str = "Alice") -> Customer:
+        customer = Customer(name=name)
+        self.customer_manager.add_customer(customer)
+        return customer
+
+    def _add_platform(self, pid: str = "wechat", name: str = "WeChat") -> Platform:
+        platform = Platform(pid=pid, name=name)
+        self.platform_manager.add_platform(platform)
+        return platform
+
     def _build_account(self, account: str = "alice@example.com") -> Account:
+        customer = self._add_customer()
+        platform = self._add_platform()
         return Account(
-            cid=1,
-            pid="wechat",
+            cid=customer.cid,
+            pid=platform.pid,
             account=account,
             nickname="Alice",
             avatar="alice.png",
@@ -57,9 +73,11 @@ class AccountManagerTestCase(unittest.TestCase):
         self.assertIsNotNone(account.updated_time)
 
     def test_add_account_test_data(self) -> None:
+        customer = self._add_customer(name="Test User")
+        platform = self._add_platform(pid="wechat-test", name="WeChat Test")
         test_account = Account(
-            cid=1001,
-            pid="wechat-test",
+            cid=customer.cid,
+            pid=platform.pid,
             account="test.user@egooai.com",
             nickname="Test User",
             avatar="test-user.png",
@@ -72,7 +90,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
         self.assertIsNotNone(saved_account)
         assert saved_account is not None
-        self.assertEqual(saved_account.cid, 1001)
+        self.assertEqual(saved_account.cid, customer.cid)
         self.assertEqual(saved_account.pid, "wechat-test")
         self.assertEqual(saved_account.account, "test.user@egooai.com")
         self.assertEqual(saved_account.nickname, "Test User")
@@ -96,11 +114,49 @@ class AccountManagerTestCase(unittest.TestCase):
     def test_get_account_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_account(9999))
 
+    def test_add_account_accepts_nullable_identity_fields(self) -> None:
+        account = Account(
+            cid=None,
+            pid=None,
+            account=None,
+            nickname=None,
+            avatar=None,
+            sids=None,
+            extra=None,
+        )
+
+        self.manager.add_account(account)
+        saved_account = self.manager.get_account(account.aid)
+
+        self.assertIsNotNone(saved_account)
+        assert saved_account is not None
+        self.assertIsNone(saved_account.cid)
+        self.assertIsNone(saved_account.pid)
+        self.assertIsNone(saved_account.account)
+        self.assertIsNone(saved_account.nickname)
+        self.assertIsNone(saved_account.avatar)
+
+    def test_add_account_enforces_customer_and_platform_foreign_keys(self) -> None:
+        account = Account(
+            cid=9999,
+            pid="missing-platform",
+            account="ghost@example.com",
+            nickname="Ghost",
+            avatar="ghost.png",
+            sids=[1],
+            extra={"level": 0},
+        )
+
+        with self.assertRaises(IntegrityError):
+            self.manager.add_account(account)
+
     def test_list_account_returns_all_accounts_in_aid_order(self) -> None:
         first = self._build_account(account="alice@example.com")
+        second_customer = self._add_customer(name="Bella")
+        second_platform = self._add_platform(pid="douyin", name="Douyin")
         second = Account(
-            cid=2,
-            pid="douyin",
+            cid=second_customer.cid,
+            pid=second_platform.pid,
             account="bella@example.com",
             nickname="Bella",
             avatar="bella.png",
@@ -122,9 +178,11 @@ class AccountManagerTestCase(unittest.TestCase):
         original_created_time = account.created_time
         original_updated_time = account.updated_time
 
+        updated_customer = self._add_customer(name="Alice Zhang")
+        updated_platform = self._add_platform(pid="wechat-updated", name="WeChat Updated")
         updated_account = Account(
-            cid=10,
-            pid="wechat-updated",
+            cid=updated_customer.cid,
+            pid=updated_platform.pid,
             account="alice-updated@example.com",
             nickname="Alice Zhang",
             avatar="updated.png",
@@ -137,7 +195,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
         self.assertIsNotNone(saved_account)
         assert saved_account is not None
-        self.assertEqual(saved_account.cid, 10)
+        self.assertEqual(saved_account.cid, updated_customer.cid)
         self.assertEqual(saved_account.pid, "wechat-updated")
         self.assertEqual(saved_account.account, "alice-updated@example.com")
         self.assertEqual(saved_account.nickname, "Alice Zhang")
@@ -148,9 +206,11 @@ class AccountManagerTestCase(unittest.TestCase):
         self.assertGreaterEqual(saved_account.updated_time, original_updated_time)
 
     def test_edit_account_raises_when_missing(self) -> None:
+        customer = self._add_customer(name="Ghost")
+        platform = self._add_platform(pid="ghost-platform", name="Ghost Platform")
         updated_account = Account(
-            cid=1,
-            pid="wechat",
+            cid=customer.cid,
+            pid=platform.pid,
             account="ghost@example.com",
             nickname="Ghost",
             avatar="ghost.png",

@@ -11,10 +11,10 @@ def utc_now() -> datetime:
 
 class Customer(SQLModel, table=True):
     cid: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    sex: str
-    birthdate: date
-    region: str
+    name: Optional[str] = Field(default=None)
+    sex: Optional[str] = Field(default=None)
+    birthdate: Optional[date] = Field(default=None)
+    region: Optional[str] = Field(default=None)
     extra: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     image: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     created_time: datetime = Field(default_factory=utc_now)

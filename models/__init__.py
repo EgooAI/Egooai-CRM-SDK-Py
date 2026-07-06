@@ -1,9 +1,9 @@
-from .Account import Account
-from .Customer import Customer
-from .Platform import Platform
-from .SessionChat import SessionChat
-from .SessionMeta import SessionMeta
-from .Translate import Translate
-from .Version import Version
+from .account import Account
+from .customer import Customer
+from .meta import Meta
+from .platform import Platform
+from .session_chat import SessionChat
+from .session_meta import SessionMeta
+from .translate import Translate
 
-__all__ = ["Customer", "Account", "Platform", "SessionChat", "SessionMeta", "Translate", "Version"]
+__all__ = ["Customer", "Account", "Platform", "SessionChat", "SessionMeta", "Translate", "Meta"]

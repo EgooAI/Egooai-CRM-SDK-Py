@@ -5,8 +5,8 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from models import SessionChat, SessionMeta
-from models.Customer import utc_now
-from models.SessionChat import get_session_chat_table, normalize_session_chatid
+from models.customer import utc_now
+from models.session_chat import get_session_chat_table, normalize_session_chatid
 
 from . import bootstrap_engine
 
@@ -14,9 +14,9 @@ from . import bootstrap_engine
 class SessionChatManager:
     """负责按 chatid 动态创建会话聊天表并执行增删改查。"""
 
-    def __init__(self, config_path: Optional[Path | str] = None) -> None:
-        """读取数据库配置、创建 engine，并完成静态表初始化。"""
-        self.config_path, self.database_path, self.engine = bootstrap_engine(config_path)
+    def __init__(self, database_path: Optional[Path | str] = None) -> None:
+        """读取数据库路径、创建 engine，并完成静态表初始化。"""
+        self.database_path, self.engine = bootstrap_engine(database_path)
 
     def ensure_session_chat_table(self, chatid: str) -> str:
         """确保指定 chatid 对应的聊天表存在，并返回物理表名。"""

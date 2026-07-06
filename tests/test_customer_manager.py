@@ -12,10 +12,8 @@ class CustomerManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
-        self.config_path = self.temp_path / "sql.yml"
         self.db_path = self.temp_path / "customer.sqlite"
-        self.config_path.write_text("type: sqlite\npath: ./customer.sqlite\n", encoding="utf-8")
-        self.manager = CustomerManager(config_path=self.config_path)
+        self.manager = CustomerManager(database_path=self.db_path)
 
     def tearDown(self) -> None:
         self.manager.engine.dispose()
@@ -70,6 +68,19 @@ class CustomerManagerTestCase(unittest.TestCase):
 
     def test_get_customer_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_customer(9999))
+
+    def test_add_customer_accepts_nullable_profile_fields(self) -> None:
+        customer = Customer(name=None, sex=None, birthdate=None, region=None)
+
+        self.manager.add_customer(customer)
+        saved_customer = self.manager.get_customer(customer.cid)
+
+        self.assertIsNotNone(saved_customer)
+        assert saved_customer is not None
+        self.assertIsNone(saved_customer.name)
+        self.assertIsNone(saved_customer.sex)
+        self.assertIsNone(saved_customer.birthdate)
+        self.assertIsNone(saved_customer.region)
 
     def test_list_customer_returns_all_customers_in_cid_order(self) -> None:
         first = self._build_customer(name="Alice")
@@ -136,32 +147,32 @@ class CustomerManagerTestCase(unittest.TestCase):
         self.manager.delete_customer(404)
         self.assertEqual(self.manager.list_customer(), [])
 
-    def test_bootstrap_engine_raises_when_config_missing(self) -> None:
-        missing_config = self.temp_path / "missing.yml"
-
-        with self.assertRaises(FileNotFoundError):
-            bootstrap_engine(missing_config)
-
-    def test_bootstrap_engine_raises_when_type_is_not_sqlite(self) -> None:
-        invalid_config = self.temp_path / "invalid.yml"
-        invalid_config.write_text("type: mysql\npath: ./customer.sqlite\n", encoding="utf-8")
-
-        with self.assertRaises(ValueError):
-            bootstrap_engine(invalid_config)
-
-    def test_bootstrap_engine_resolves_relative_database_path(self) -> None:
-        nested_dir = self.temp_path / "config"
-        nested_dir.mkdir()
-        nested_config = nested_dir / "sql.yml"
-        nested_config.write_text("type: sqlite\npath: ./nested/customer.sqlite\n", encoding="utf-8")
-
-        config_path, database_path, engine = bootstrap_engine(nested_config)
+    def test_bootstrap_engine_creates_database_file_for_explicit_path(self) -> None:
+        database_path, engine = bootstrap_engine(self.db_path)
         try:
-            self.assertEqual(config_path, nested_config.resolve())
-            self.assertEqual(database_path, (nested_dir / "nested" / "customer.sqlite").resolve())
+            self.assertEqual(database_path, self.db_path.resolve())
             self.assertTrue(database_path.exists())
         finally:
             engine.dispose()
+
+    def test_bootstrap_engine_resolves_relative_database_path(self) -> None:
+        relative_path = Path("tests-temp") / "nested" / "customer.sqlite"
+
+        database_path, engine = bootstrap_engine(relative_path)
+        try:
+            self.assertEqual(database_path, relative_path.resolve())
+            self.assertTrue(database_path.exists())
+        finally:
+            engine.dispose()
+            if database_path.exists():
+                database_path.unlink()
+            parent = database_path.parent
+            while parent.name != "Egooai-CRM-SDK-Py" and parent.exists():
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
+                parent = parent.parent
 
 
 if __name__ == "__main__":
