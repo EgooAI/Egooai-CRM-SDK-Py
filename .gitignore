@@ -1,13 +1,6 @@
 *.log
-
-api.yml
-
-优化方向.md
-
-interface.md
-
-sql.yml
-
-db.sqlite
-
+*.sqlite
+*.md
+!README.md
+.pytest_cache/
 __pycache__/
