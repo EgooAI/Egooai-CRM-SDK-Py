@@ -55,9 +55,7 @@ class SessionChatManager:
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
-            existing_row = session.exec(
-                session_chat_table.select().where(session_chat_table.c.id == chat_id)
-            ).first()
+            existing_row = session.exec(session_chat_table.select().where(session_chat_table.c.id == chat_id)).first()
             if existing_row is None:
                 return
 
@@ -77,9 +75,7 @@ class SessionChatManager:
 
         updated_time = utc_now()
         with Session(self.engine) as session:
-            existing_row = session.exec(
-                session_chat_table.select().where(session_chat_table.c.id == chat_id)
-            ).first()
+            existing_row = session.exec(session_chat_table.select().where(session_chat_table.c.id == chat_id)).first()
             if existing_row is None:
                 raise ValueError(f"SessionChat {chat_id} not found in {session_chat_table.name}")
 
@@ -110,9 +106,7 @@ class SessionChatManager:
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
-            row = session.exec(
-                session_chat_table.select().where(session_chat_table.c.id == chat_id)
-            ).first()
+            row = session.exec(session_chat_table.select().where(session_chat_table.c.id == chat_id)).first()
             if row is None:
                 return None
             return self._build_session_chat(row)

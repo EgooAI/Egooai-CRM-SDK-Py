@@ -31,12 +31,7 @@ class SessionMetaManagerTestCase(unittest.TestCase):
 
         connection = sqlite3.connect(self.db_path)
         try:
-            tables = {
-                row[0]
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
-            }
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         finally:
             connection.close()
 
@@ -59,12 +54,7 @@ class SessionMetaManagerTestCase(unittest.TestCase):
 
         connection = sqlite3.connect(self.db_path)
         try:
-            tables = {
-                row[0]
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
-            }
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         finally:
             connection.close()
 
@@ -167,12 +157,7 @@ class SessionMetaManagerTestCase(unittest.TestCase):
 
         connection = sqlite3.connect(self.db_path)
         try:
-            tables = {
-                row[0]
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
-            }
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         finally:
             connection.close()
 
