@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import inspect
 from sqlmodel import Session, select
 
 from models import Customer
@@ -58,7 +59,8 @@ class CustomerManager:
     def list_customer(self) -> list[Customer]:
         """查询并返回全部客户记录，结果按 cid 升序排列。"""
         with Session(self.engine) as session:
-            statement = select(Customer).order_by(Customer.cid)
+            cid_column = inspect(Customer).columns.cid
+            statement = select(Customer).order_by(cid_column)
             return list(session.exec(statement).all())
 
 

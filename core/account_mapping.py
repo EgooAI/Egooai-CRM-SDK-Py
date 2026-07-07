@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import inspect
 from sqlmodel import Session, select
 
 from models.account_mapping import AccountMapping
@@ -54,7 +55,8 @@ class AccountMappingManager:
     def list_account_mapping(self) -> list[AccountMapping]:
         """查询并返回全部映射记录，结果按 amid 升序排列。"""
         with Session(self.engine) as session:
-            statement = select(AccountMapping).order_by(AccountMapping.amid)
+            amid_column = inspect(AccountMapping).columns.amid
+            statement = select(AccountMapping).order_by(amid_column)
             return list(session.exec(statement).all())
 
 

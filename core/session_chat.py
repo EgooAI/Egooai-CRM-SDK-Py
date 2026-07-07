@@ -39,9 +39,14 @@ class SessionChatManager:
         }
 
         with Session(self.engine) as session:
-            result = session.exec(session_chat_table.insert().values(**payload))
+            session.exec(session_chat_table.insert().values(**payload))
             session.commit()
-            chat.id = result.lastrowid
+            inserted_row = session.connection().execute(
+                session_chat_table.select().where(session_chat_table.c.created_time == chat.created_time)
+            ).first()
+            if inserted_row is None:
+                raise ValueError(f"SessionChat insert failed for {session_chat_table.name}")
+            chat.id = inserted_row.id
 
     def add_session_chat_by_sid(self, sid: int, chat: SessionChat) -> None:
         """按 sid 定位会话后，向对应聊天表新增一条消息。"""
@@ -55,7 +60,9 @@ class SessionChatManager:
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
-            existing_row = session.exec(session_chat_table.select().where(session_chat_table.c.id == chat_id)).first()
+            existing_row = session.connection().execute(
+                session_chat_table.select().where(session_chat_table.c.id == chat_id)
+            ).first()
             if existing_row is None:
                 return
 
@@ -75,7 +82,9 @@ class SessionChatManager:
 
         updated_time = utc_now()
         with Session(self.engine) as session:
-            existing_row = session.exec(session_chat_table.select().where(session_chat_table.c.id == chat_id)).first()
+            existing_row = session.connection().execute(
+                session_chat_table.select().where(session_chat_table.c.id == chat_id)
+            ).first()
             if existing_row is None:
                 raise ValueError(f"SessionChat {chat_id} not found in {session_chat_table.name}")
 
@@ -106,7 +115,9 @@ class SessionChatManager:
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
-            row = session.exec(session_chat_table.select().where(session_chat_table.c.id == chat_id)).first()
+            row = session.connection().execute(
+                session_chat_table.select().where(session_chat_table.c.id == chat_id)
+            ).first()
             if row is None:
                 return None
             return self._build_session_chat(row)
@@ -123,7 +134,7 @@ class SessionChatManager:
         session_chat_table.create(self.engine, checkfirst=True)
 
         with Session(self.engine) as session:
-            rows = session.exec(session_chat_table.select().order_by(session_chat_table.c.id)).all()
+            rows = session.connection().execute(session_chat_table.select().order_by(session_chat_table.c.id)).all()
             return [self._build_session_chat(row) for row in rows]
 
     def list_session_chat_by_sid(self, sid: int) -> list[SessionChat]:
@@ -149,15 +160,14 @@ class SessionChatManager:
 
     @staticmethod
     def _build_session_chat(row) -> SessionChat:
-        row_mapping = row._mapping
-        created_time = SessionChatManager._ensure_utc_datetime(row_mapping["created_time"])
-        updated_time = SessionChatManager._ensure_utc_datetime(row_mapping["updated_time"])
+        created_time = SessionChatManager._ensure_utc_datetime(row.created_time)
+        updated_time = SessionChatManager._ensure_utc_datetime(row.updated_time)
         return SessionChat(
-            id=row_mapping["id"],
-            sender=row_mapping["sender"],
-            type=row_mapping["type"],
-            content=row_mapping["content"],
-            read=row_mapping["read"],
+            id=row.id,
+            sender=row.sender,
+            type=row.type,
+            content=row.content,
+            read=row.read,
             created_time=created_time,
             updated_time=updated_time,
         )

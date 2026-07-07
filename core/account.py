@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import inspect
 from sqlmodel import Session, select
 
 from models import Account
@@ -59,7 +60,8 @@ class AccountManager:
     def list_account(self) -> list[Account]:
         """查询并返回全部账号记录，结果按 aid 升序排列。"""
         with Session(self.engine) as session:
-            statement = select(Account).order_by(Account.aid)
+            aid_column = inspect(Account).columns.aid
+            statement = select(Account).order_by(aid_column)
             return list(session.exec(statement).all())
 
 

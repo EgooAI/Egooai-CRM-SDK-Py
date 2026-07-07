@@ -51,6 +51,7 @@ class SessionChatManagerTestCase(unittest.TestCase):
         account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
+        assert account.aid is not None
         chat = self._build_session_chat(sender=account.aid)
 
         self.manager.add_session_chat(self.alpha_chatid, chat)
@@ -85,8 +86,10 @@ class SessionChatManagerTestCase(unittest.TestCase):
         account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
+        assert account.aid is not None
         chat = self._build_session_chat(sender=account.aid)
         self.manager.add_session_chat(self.alpha_chatid, chat)
+        assert chat.id is not None
 
         saved_chat = self.manager.get_session_chat(self.alpha_chatid, chat.id)
 
@@ -102,6 +105,8 @@ class SessionChatManagerTestCase(unittest.TestCase):
         account_two = self._add_account("second@example.com")
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
+        assert account_one.aid is not None
+        assert account_two.aid is not None
         first = self._build_session_chat(sender=account_one.aid, type_="text")
         second = SessionChat(
             sender=account_two.aid,
@@ -112,6 +117,8 @@ class SessionChatManagerTestCase(unittest.TestCase):
 
         self.manager.add_session_chat(self.alpha_chatid, first)
         self.manager.add_session_chat(self.alpha_chatid, second)
+        assert first.id is not None
+        assert second.id is not None
 
         chats = self.manager.list_session_chat(self.alpha_chatid)
 
@@ -122,12 +129,15 @@ class SessionChatManagerTestCase(unittest.TestCase):
         account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
+        assert account.aid is not None
         chat = self._build_session_chat(sender=account.aid)
         self.manager.add_session_chat(self.alpha_chatid, chat)
+        assert chat.id is not None
         original_created_time = chat.created_time
         original_updated_time = chat.updated_time
 
         replacement_account = self._add_account("replacement@example.com")
+        assert replacement_account.aid is not None
         updated_chat = SessionChat(
             sender=replacement_account.aid,
             type="card",
@@ -149,6 +159,7 @@ class SessionChatManagerTestCase(unittest.TestCase):
 
     def test_edit_session_chat_raises_when_missing(self) -> None:
         account = self._add_account("ghost@example.com")
+        assert account.aid is not None
         updated_chat = SessionChat(
             sender=account.aid,
             type="text",
@@ -163,8 +174,10 @@ class SessionChatManagerTestCase(unittest.TestCase):
         account = self._add_account()
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
+        assert account.aid is not None
         chat = self._build_session_chat(sender=account.aid)
         self.manager.add_session_chat(self.alpha_chatid, chat)
+        assert chat.id is not None
 
         self.manager.delete_session_chat(self.alpha_chatid, chat.id)
 
@@ -185,6 +198,8 @@ class SessionChatManagerTestCase(unittest.TestCase):
         beta_meta = self._build_session_meta(name="session-beta", chatid=self.beta_chatid)
         self.session_meta_manager.add_session_meta(alpha_meta)
         self.session_meta_manager.add_session_meta(beta_meta)
+        assert alpha_account.aid is not None
+        assert beta_account.aid is not None
         alpha_chat = self._build_session_chat(sender=alpha_account.aid)
         beta_chat = SessionChat(
             sender=beta_account.aid,
@@ -228,6 +243,7 @@ class SessionChatManagerTestCase(unittest.TestCase):
     def test_orphan_chatid_raises_and_does_not_recreate_table(self) -> None:
         session_meta = self._build_session_meta(chatid=self.alpha_chatid)
         self.session_meta_manager.add_session_meta(session_meta)
+        assert session_meta.sid is not None
         self.session_meta_manager.delete_session_meta(session_meta.sid)
         table_name = resolve_session_chat_table_name(self.alpha_chatid)
 
@@ -255,9 +271,13 @@ class SessionChatManagerTestCase(unittest.TestCase):
         account = self._add_account()
         session_meta = self._build_session_meta()
         self.session_meta_manager.add_session_meta(session_meta)
+        assert account.aid is not None
+        assert session_meta.sid is not None
+        assert session_meta.chatid is not None
         chat = self._build_session_chat(sender=account.aid)
 
         self.manager.add_session_chat_by_sid(session_meta.sid, chat)
+        assert chat.id is not None
         saved_chat = self.manager.get_session_chat(session_meta.chatid, chat.id)
 
         self.assertIsNotNone(saved_chat)
@@ -269,6 +289,9 @@ class SessionChatManagerTestCase(unittest.TestCase):
         account_two = self._add_account("sid-second@example.com")
         session_meta = self._build_session_meta()
         self.session_meta_manager.add_session_meta(session_meta)
+        assert account_one.aid is not None
+        assert account_two.aid is not None
+        assert session_meta.sid is not None
         first = self._build_session_chat(sender=account_one.aid)
         second = SessionChat(
             sender=account_two.aid,
@@ -279,6 +302,8 @@ class SessionChatManagerTestCase(unittest.TestCase):
 
         self.manager.add_session_chat_by_sid(session_meta.sid, first)
         self.manager.add_session_chat_by_sid(session_meta.sid, second)
+        assert first.id is not None
+        assert second.id is not None
 
         chats = self.manager.list_session_chat_by_sid(session_meta.sid)
 

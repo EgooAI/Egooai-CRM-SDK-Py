@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -82,7 +83,8 @@ class SessionMetaManager:
     def list_session_meta(self) -> list[SessionMeta]:
         """查询并返回全部会话元数据记录，结果按 sid 升序排列。"""
         with Session(self.engine) as session:
-            statement = select(SessionMeta).order_by(SessionMeta.sid)
+            sid_column = inspect(SessionMeta).columns.sid
+            statement = select(SessionMeta).order_by(sid_column)
             return list(session.exec(statement).all())
 
 
