@@ -1,0 +1,13 @@
+{
+    "black-formatter.args": [
+        "-l",
+        "120"
+    ],
+    "python.analysis.typeCheckingMode": "basic",
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "files.trimFinalNewlines": true,
+        "files.trimTrailingWhitespace": true
+    }
+}
