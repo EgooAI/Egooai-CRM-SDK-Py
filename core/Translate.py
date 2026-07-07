@@ -4,8 +4,7 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from models.translate import Translate
-
-from . import bootstrap_engine
+from utils.common import bootstrap_engine
 
 
 class TranslateManager:

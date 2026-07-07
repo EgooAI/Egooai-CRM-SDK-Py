@@ -6,7 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlmodel import Field, SQLModel
 
-from .customer import utc_now
+from utils.common import utc_now
 
 _SESSION_CHAT_TABLE_PREFIX = "sessionchat_"
 _SESSION_CHATID_PATTERN = re.compile(r"^[0-9a-f]{32}$")

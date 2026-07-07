@@ -4,9 +4,7 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from models.platform import Platform
-from models.customer import utc_now
-
-from . import bootstrap_engine
+from utils.common import bootstrap_engine, utc_now
 
 
 class PlatformManager:

@@ -5,15 +5,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from models import SessionMeta
-from models.customer import utc_now
 from models.session_chat import (
     generate_session_chatid,
     get_session_chat_table,
     normalize_session_chatid,
     remove_session_chat_table,
 )
-
-from . import bootstrap_engine
+from utils.common import bootstrap_engine, utc_now
 
 
 class SessionMetaManager:

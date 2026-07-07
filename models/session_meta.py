@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
-from .customer import utc_now
+from utils.common import utc_now
 from .session_chat import generate_session_chatid
 
 

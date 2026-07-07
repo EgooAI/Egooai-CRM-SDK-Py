@@ -4,8 +4,7 @@ from typing import Optional
 from sqlmodel import Session
 
 from models.meta import Meta
-
-from . import bootstrap_engine
+from utils.common import bootstrap_engine
 
 
 class MetaManager:

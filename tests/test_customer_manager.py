@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 
 from core import CustomerManager, bootstrap_engine
 from models import Customer
+from utils import utc_now
 
 
 class CustomerManagerTestCase(unittest.TestCase):
@@ -173,6 +174,11 @@ class CustomerManagerTestCase(unittest.TestCase):
                 except OSError:
                     break
                 parent = parent.parent
+
+    def test_utils_utc_now_is_timezone_aware(self) -> None:
+        current = utc_now()
+
+        self.assertIsNotNone(current.tzinfo)
 
 
 if __name__ == "__main__":

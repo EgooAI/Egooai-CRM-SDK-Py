@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
-from .customer import utc_now
+from utils.common import utc_now
 
 
 class Account(SQLModel, table=True):

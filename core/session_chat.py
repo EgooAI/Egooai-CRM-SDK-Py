@@ -5,10 +5,8 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from models import SessionChat, SessionMeta
-from models.customer import utc_now
 from models.session_chat import get_session_chat_table, normalize_session_chatid
-
-from . import bootstrap_engine
+from utils.common import bootstrap_engine, utc_now
 
 
 class SessionChatManager:

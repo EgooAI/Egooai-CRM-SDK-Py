@@ -1,12 +1,10 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+from utils.common import utc_now
 
 
 class Customer(SQLModel, table=True):
