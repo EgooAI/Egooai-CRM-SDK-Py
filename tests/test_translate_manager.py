@@ -108,6 +108,40 @@ class TranslateManagerTestCase(unittest.TestCase):
         self.manager.delete_translate("missing")
         self.assertEqual(self.manager.list_translate(), [])
 
+    def test_upsert_translate_inserts_when_missing(self) -> None:
+        translate = self._build_translate(text_hash="hash-upsert", translation="hello")
+
+        self.manager.upsert_translate(translate)
+
+        self.assertEqual(translate.text_hash, "hash-upsert")
+        self.assertEqual(len(self.manager.list_translate()), 1)
+
+    def test_upsert_translate_updates_existing_record(self) -> None:
+        translate = self._build_translate()
+        self.manager.add_translate(translate)
+        updated_translate = Translate(text_hash=translate.text_hash, translation="updated text")
+
+        self.manager.upsert_translate(updated_translate)
+        saved_translate = self.manager.get_translate(translate.text_hash)
+
+        self.assertIsNotNone(saved_translate)
+        assert saved_translate is not None
+        self.assertEqual(saved_translate.translation, "updated text")
+        self.assertEqual(len(self.manager.list_translate()), 1)
+
+    def test_upsert_translate_skips_duplicate_payload(self) -> None:
+        translate = self._build_translate()
+        self.manager.add_translate(translate)
+        duplicate_translate = Translate(text_hash=translate.text_hash, translation=translate.translation)
+
+        self.manager.upsert_translate(duplicate_translate)
+
+        self.assertEqual(len(self.manager.list_translate()), 1)
+        saved_translate = self.manager.get_translate(translate.text_hash)
+        self.assertIsNotNone(saved_translate)
+        assert saved_translate is not None
+        self.assertEqual(saved_translate.translation, "translated text")
+
 
 if __name__ == "__main__":
     unittest.main()

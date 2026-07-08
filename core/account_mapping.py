@@ -15,9 +15,58 @@ class AccountMappingManager:
         """读取数据库路径、创建 engine，并在表缺失时自动建表。"""
         self.database_path, self.engine = bootstrap_engine(database_path)
 
+    @staticmethod
+    def _payload_tuple(account_mapping: AccountMapping) -> tuple[object, ...]:
+        return (account_mapping.aid, account_mapping.type, account_mapping.key)
+
+    @staticmethod
+    def _sync_account_mapping_state(target: AccountMapping, source: AccountMapping) -> None:
+        target.amid = source.amid
+
+    @staticmethod
+    def _apply_account_mapping_updates(current_account_mapping: AccountMapping, account_mapping: AccountMapping) -> None:
+        current_account_mapping.aid = account_mapping.aid
+        current_account_mapping.type = account_mapping.type
+        current_account_mapping.key = account_mapping.key
+
+    def _find_matching_account_mapping(self, session: Session, account_mapping: AccountMapping) -> Optional[AccountMapping]:
+        statement = select(AccountMapping)
+        for existing_account_mapping in session.exec(statement).all():
+            if self._payload_tuple(existing_account_mapping) == self._payload_tuple(account_mapping):
+                return existing_account_mapping
+        return None
+
     def add_account_mapping(self, account_mapping: AccountMapping) -> None:
         """向 AccountMapping 表新增一条映射记录，并回填数据库生成的字段。"""
         with Session(self.engine) as session:
+            session.add(account_mapping)
+            session.commit()
+            session.refresh(account_mapping)
+
+    def upsert_account_mapping(self, account_mapping: AccountMapping) -> None:
+        """按主键或业务字段执行 UPSERT；完全重复的数据不会重复插入。"""
+        with Session(self.engine) as session:
+            if account_mapping.amid is not None:
+                current_account_mapping = session.get(AccountMapping, account_mapping.amid)
+                if current_account_mapping is None:
+                    raise ValueError(f"AccountMapping {account_mapping.amid} not found")
+
+                if self._payload_tuple(current_account_mapping) == self._payload_tuple(account_mapping):
+                    self._sync_account_mapping_state(account_mapping, current_account_mapping)
+                    return
+
+                self._apply_account_mapping_updates(current_account_mapping, account_mapping)
+                session.add(current_account_mapping)
+                session.commit()
+                session.refresh(current_account_mapping)
+                self._sync_account_mapping_state(account_mapping, current_account_mapping)
+                return
+
+            existing_account_mapping = self._find_matching_account_mapping(session, account_mapping)
+            if existing_account_mapping is not None:
+                self._sync_account_mapping_state(account_mapping, existing_account_mapping)
+                return
+
             session.add(account_mapping)
             session.commit()
             session.refresh(account_mapping)
@@ -39,9 +88,7 @@ class AccountMappingManager:
             if current_account_mapping is None:
                 raise ValueError(f"AccountMapping {amid} not found")
 
-            current_account_mapping.aid = account_mapping.aid
-            current_account_mapping.type = account_mapping.type
-            current_account_mapping.key = account_mapping.key
+            self._apply_account_mapping_updates(current_account_mapping, account_mapping)
 
             session.add(current_account_mapping)
             session.commit()

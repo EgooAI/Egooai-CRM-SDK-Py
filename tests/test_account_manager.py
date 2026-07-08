@@ -229,6 +229,92 @@ class AccountManagerTestCase(unittest.TestCase):
         self.manager.delete_account(404)
         self.assertEqual(self.manager.list_account(), [])
 
+    def test_upsert_account_inserts_when_missing(self) -> None:
+        account = self._build_account(account="upsert@example.com")
+
+        self.manager.upsert_account(account)
+
+        self.assertIsNotNone(account.aid)
+        self.assertEqual(len(self.manager.list_account()), 1)
+
+    def test_upsert_account_updates_existing_account_fields(self) -> None:
+        account = self._build_account()
+        self.manager.add_account(account)
+        original_created_time = account.created_time
+        original_updated_time = account.updated_time
+
+        updated_customer = self._add_customer(name="Updated Alice")
+        updated_platform = self._add_platform(pid="wechat-upsert", name="WeChat Upsert")
+        updated_account = Account(
+            aid=account.aid,
+            cid=updated_customer.cid,
+            pid=updated_platform.pid,
+            account="alice-upsert@example.com",
+            nickname="Alice Upsert",
+            avatar="upsert.png",
+            sids=[9, 10],
+            extra={"level": 9},
+        )
+
+        self.manager.upsert_account(updated_account)
+        saved_account = self.manager.get_account(account.aid)
+
+        self.assertIsNotNone(saved_account)
+        assert saved_account is not None
+        self.assertEqual(saved_account.account, "alice-upsert@example.com")
+        self.assertEqual(saved_account.nickname, "Alice Upsert")
+        self.assertEqual(saved_account.created_time, original_created_time)
+        self.assertGreaterEqual(saved_account.updated_time, original_updated_time)
+
+    def test_upsert_account_skips_duplicate_payload_without_primary_key(self) -> None:
+        account = self._build_account()
+        self.manager.add_account(account)
+        duplicate_account = Account(
+            cid=account.cid,
+            pid=account.pid,
+            account=account.account,
+            nickname=account.nickname,
+            avatar=account.avatar,
+            sids=account.sids,
+            extra=account.extra,
+        )
+
+        self.manager.upsert_account(duplicate_account)
+
+        self.assertEqual(len(self.manager.list_account()), 1)
+        self.assertEqual(duplicate_account.aid, account.aid)
+
+    def test_upsert_account_raises_when_explicit_primary_key_missing(self) -> None:
+        customer = self._add_customer(name="Ghost")
+        platform = self._add_platform(pid="ghost-platform", name="Ghost Platform")
+        missing_account = Account(
+            aid=999,
+            cid=customer.cid,
+            pid=platform.pid,
+            account="ghost@example.com",
+            nickname="Ghost",
+            avatar="ghost.png",
+            sids=[0],
+            extra={"level": 0},
+        )
+
+        with self.assertRaises(ValueError):
+            self.manager.upsert_account(missing_account)
+
+    def test_upsert_account_enforces_customer_and_platform_foreign_keys(self) -> None:
+        invalid_account = Account(
+            cid=9999,
+            pid="missing-platform",
+            account="ghost@example.com",
+            nickname="Ghost",
+            avatar="ghost.png",
+            sids=[1],
+            extra={"level": 0},
+        )
+
+        with self.assertRaises(IntegrityError):
+            self.manager.upsert_account(invalid_account)
+
 
 if __name__ == "__main__":
     unittest.main()

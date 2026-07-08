@@ -65,6 +65,41 @@ class MetaManagerTestCase(unittest.TestCase):
         self.assertEqual(self.manager.get_version(), "1.0.2")
         self.assertEqual(self._count_rows(), 1)
 
+    def test_upsert_meta_inserts_when_key_missing(self) -> None:
+        meta = Meta(key="build", value="42")
+
+        self.manager.upsert_meta(meta)
+
+        self.assertEqual(meta.key, "build")
+        self.assertEqual(self._count_rows(), 1)
+
+    def test_upsert_meta_updates_existing_key_without_creating_duplicate(self) -> None:
+        first = Meta(key="build", value="42")
+        self.manager.upsert_meta(first)
+        second = Meta(key="build", value="43")
+
+        self.manager.upsert_meta(second)
+
+        self.assertEqual(self._count_rows(), 1)
+        connection = sqlite3.connect(self.db_path)
+        try:
+            row = connection.execute("SELECT value FROM meta WHERE key = 'build'").fetchone()
+        finally:
+            connection.close()
+        assert row is not None
+        self.assertEqual(row[0], "43")
+
+    def test_upsert_meta_skips_duplicate_value(self) -> None:
+        meta = Meta(key="build", value="42")
+        self.manager.upsert_meta(meta)
+        duplicate_meta = Meta(key="build", value="42")
+
+        self.manager.upsert_meta(duplicate_meta)
+
+        self.assertEqual(self._count_rows(), 1)
+        self.assertEqual(duplicate_meta.key, "build")
+        self.assertEqual(duplicate_meta.value, "42")
+
     def test_model_is_exported(self) -> None:
         meta = Meta()
 

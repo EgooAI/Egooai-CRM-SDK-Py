@@ -122,6 +122,49 @@ class PlatformManagerTestCase(unittest.TestCase):
         self.manager.delete_platform("missing")
         self.assertEqual(self.manager.list_platform(), [])
 
+    def test_upsert_platform_inserts_when_missing(self) -> None:
+        platform = self._build_platform(pid="slack")
+
+        self.manager.upsert_platform(platform)
+
+        self.assertEqual(platform.pid, "slack")
+        self.assertEqual(len(self.manager.list_platform()), 1)
+
+    def test_upsert_platform_updates_existing_platform_fields(self) -> None:
+        platform = self._build_platform()
+        self.manager.add_platform(platform)
+        original_created_time = platform.created_time
+        original_updated_time = platform.updated_time
+
+        updated_platform = Platform(
+            pid="wechat",
+            name="WeChat Upsert",
+            extra={"region": "global", "status": "active"},
+        )
+
+        self.manager.upsert_platform(updated_platform)
+        saved_platform = self.manager.get_platform("wechat")
+
+        self.assertIsNotNone(saved_platform)
+        assert saved_platform is not None
+        self.assertEqual(saved_platform.name, "WeChat Upsert")
+        self.assertEqual(saved_platform.created_time, original_created_time)
+        self.assertGreaterEqual(saved_platform.updated_time, original_updated_time)
+
+    def test_upsert_platform_skips_duplicate_payload(self) -> None:
+        platform = self._build_platform()
+        self.manager.add_platform(platform)
+        original_updated_time = platform.updated_time
+        duplicate_platform = Platform(pid="wechat", name="WeChat", extra={"region": "cn"})
+
+        self.manager.upsert_platform(duplicate_platform)
+        saved_platform = self.manager.get_platform("wechat")
+
+        self.assertIsNotNone(saved_platform)
+        assert saved_platform is not None
+        self.assertEqual(len(self.manager.list_platform()), 1)
+        self.assertEqual(saved_platform.updated_time, original_updated_time)
+
 
 if __name__ == "__main__":
     unittest.main()

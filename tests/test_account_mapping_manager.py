@@ -190,6 +190,66 @@ class AccountMappingManagerTestCase(unittest.TestCase):
         self.manager.delete_account_mapping(404)
         self.assertEqual(self.manager.list_account_mapping(), [])
 
+    def test_upsert_account_mapping_inserts_when_missing(self) -> None:
+        account = self._add_account()
+        account_mapping = self._build_account_mapping(account.aid)
+
+        self.manager.upsert_account_mapping(account_mapping)
+
+        self.assertIsNotNone(account_mapping.amid)
+        self.assertEqual(len(self.manager.list_account_mapping()), 1)
+
+    def test_upsert_account_mapping_updates_existing_fields(self) -> None:
+        first_account = self._add_account("alice@example.com")
+        second_account = self._add_account(
+            "bella@example.com",
+            customer_name="Bella",
+            pid="douyin",
+            platform_name="Douyin",
+        )
+        account_mapping = self._build_account_mapping(first_account.aid)
+        self.manager.add_account_mapping(account_mapping)
+
+        updated_account_mapping = AccountMapping(
+            amid=account_mapping.amid,
+            aid=second_account.aid,
+            type="unionid",
+            key="bella-unionid",
+        )
+
+        self.manager.upsert_account_mapping(updated_account_mapping)
+        saved_account_mapping = self.manager.get_account_mapping(account_mapping.amid)
+
+        self.assertIsNotNone(saved_account_mapping)
+        assert saved_account_mapping is not None
+        self.assertEqual(saved_account_mapping.aid, second_account.aid)
+        self.assertEqual(saved_account_mapping.type, "unionid")
+        self.assertEqual(saved_account_mapping.key, "bella-unionid")
+
+    def test_upsert_account_mapping_skips_duplicate_payload_without_primary_key(self) -> None:
+        account = self._add_account()
+        account_mapping = self._build_account_mapping(account.aid)
+        self.manager.add_account_mapping(account_mapping)
+        duplicate_account_mapping = self._build_account_mapping(account.aid)
+
+        self.manager.upsert_account_mapping(duplicate_account_mapping)
+
+        self.assertEqual(len(self.manager.list_account_mapping()), 1)
+        self.assertEqual(duplicate_account_mapping.amid, account_mapping.amid)
+
+    def test_upsert_account_mapping_raises_when_explicit_primary_key_missing(self) -> None:
+        account = self._add_account()
+        missing_account_mapping = AccountMapping(amid=999, aid=account.aid, type="openid", key="missing")
+
+        with self.assertRaises(ValueError):
+            self.manager.upsert_account_mapping(missing_account_mapping)
+
+    def test_upsert_account_mapping_enforces_account_foreign_key(self) -> None:
+        account_mapping = self._build_account_mapping(9999)
+
+        with self.assertRaises(IntegrityError):
+            self.manager.upsert_account_mapping(account_mapping)
+
 
 if __name__ == "__main__":
     unittest.main()

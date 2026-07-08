@@ -22,4 +22,4 @@ class Customer(SQLModel, table=True):
     )
 
 
-__all__ = ["Customer", "utc_now"]
+__all__ = ["Customer"]

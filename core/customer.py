@@ -15,9 +15,71 @@ class CustomerManager:
         """读取数据库路径、创建 engine，并在表缺失时自动建表。"""
         self.database_path, self.engine = bootstrap_engine(database_path)
 
+    @staticmethod
+    def _payload_tuple(customer: Customer) -> tuple[object, ...]:
+        return (
+            customer.name,
+            customer.sex,
+            customer.birthdate,
+            customer.region,
+            customer.extra,
+            customer.image,
+        )
+
+    @staticmethod
+    def _sync_customer_state(target: Customer, source: Customer) -> None:
+        target.cid = source.cid
+        target.created_time = source.created_time
+        target.updated_time = source.updated_time
+
+    @staticmethod
+    def _apply_customer_updates(current_customer: Customer, customer: Customer) -> None:
+        current_customer.name = customer.name
+        current_customer.sex = customer.sex
+        current_customer.birthdate = customer.birthdate
+        current_customer.region = customer.region
+        current_customer.extra = customer.extra
+        current_customer.image = customer.image
+        current_customer.updated_time = utc_now()
+
+    def _find_matching_customer(self, session: Session, customer: Customer) -> Optional[Customer]:
+        statement = select(Customer)
+        for existing_customer in session.exec(statement).all():
+            if self._payload_tuple(existing_customer) == self._payload_tuple(customer):
+                return existing_customer
+        return None
+
     def add_customer(self, customer: Customer) -> None:
         """向 Customer 表新增一条客户记录，并回填数据库生成的字段。"""
         with Session(self.engine) as session:
+            session.add(customer)
+            session.commit()
+            session.refresh(customer)
+
+    def upsert_customer(self, customer: Customer) -> None:
+        """按主键或业务字段执行 UPSERT；完全重复的数据不会重复插入。"""
+        with Session(self.engine) as session:
+            if customer.cid is not None:
+                current_customer = session.get(Customer, customer.cid)
+                if current_customer is None:
+                    raise ValueError(f"Customer {customer.cid} not found")
+
+                if self._payload_tuple(current_customer) == self._payload_tuple(customer):
+                    self._sync_customer_state(customer, current_customer)
+                    return
+
+                self._apply_customer_updates(current_customer, customer)
+                session.add(current_customer)
+                session.commit()
+                session.refresh(current_customer)
+                self._sync_customer_state(customer, current_customer)
+                return
+
+            existing_customer = self._find_matching_customer(session, customer)
+            if existing_customer is not None:
+                self._sync_customer_state(customer, existing_customer)
+                return
+
             session.add(customer)
             session.commit()
             session.refresh(customer)
@@ -39,13 +101,7 @@ class CustomerManager:
             if current_customer is None:
                 raise ValueError(f"Customer {cid} not found")
 
-            current_customer.name = customer.name
-            current_customer.sex = customer.sex
-            current_customer.birthdate = customer.birthdate
-            current_customer.region = customer.region
-            current_customer.extra = customer.extra
-            current_customer.image = customer.image
-            current_customer.updated_time = utc_now()
+            self._apply_customer_updates(current_customer, customer)
 
             session.add(current_customer)
             session.commit()

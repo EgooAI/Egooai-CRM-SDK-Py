@@ -14,12 +14,38 @@ class TranslateManager:
         """读取数据库路径、创建 engine，并在表缺失时自动建表。"""
         self.database_path, self.engine = bootstrap_engine(database_path)
 
+    @staticmethod
+    def _payload_tuple(translate: Translate) -> tuple[object, ...]:
+        return (translate.translation,)
+
+    @staticmethod
+    def _apply_translate_updates(current_translate: Translate, translate: Translate) -> None:
+        current_translate.translation = translate.translation
+
     def add_translate(self, translate: Translate) -> None:
         """向 Translate 表新增一条翻译映射记录。"""
         with Session(self.engine) as session:
             session.add(translate)
             session.commit()
             session.refresh(translate)
+
+    def upsert_translate(self, translate: Translate) -> None:
+        """按主键执行 UPSERT；相同 payload 不会重复更新或插入。"""
+        with Session(self.engine) as session:
+            current_translate = session.get(Translate, translate.text_hash)
+            if current_translate is None:
+                session.add(translate)
+                session.commit()
+                session.refresh(translate)
+                return
+
+            if self._payload_tuple(current_translate) == self._payload_tuple(translate):
+                return
+
+            self._apply_translate_updates(current_translate, translate)
+            session.add(current_translate)
+            session.commit()
+            session.refresh(current_translate)
 
     def delete_translate(self, text_hash: str) -> None:
         """按主键删除翻译映射；如果记录不存在则直接返回。"""
@@ -38,7 +64,7 @@ class TranslateManager:
             if current_translate is None:
                 raise ValueError(f"Translate {text_hash} not found")
 
-            current_translate.translation = translate.translation
+            self._apply_translate_updates(current_translate, translate)
 
             session.add(current_translate)
             session.commit()

@@ -15,9 +15,73 @@ class AccountManager:
         """读取数据库路径、创建 engine，并在表缺失时自动建表。"""
         self.database_path, self.engine = bootstrap_engine(database_path)
 
+    @staticmethod
+    def _payload_tuple(account: Account) -> tuple[object, ...]:
+        return (
+            account.cid,
+            account.pid,
+            account.account,
+            account.nickname,
+            account.avatar,
+            account.sids,
+            account.extra,
+        )
+
+    @staticmethod
+    def _sync_account_state(target: Account, source: Account) -> None:
+        target.aid = source.aid
+        target.created_time = source.created_time
+        target.updated_time = source.updated_time
+
+    @staticmethod
+    def _apply_account_updates(current_account: Account, account: Account) -> None:
+        current_account.cid = account.cid
+        current_account.pid = account.pid
+        current_account.account = account.account
+        current_account.nickname = account.nickname
+        current_account.avatar = account.avatar
+        current_account.sids = account.sids
+        current_account.extra = account.extra
+        current_account.updated_time = utc_now()
+
+    def _find_matching_account(self, session: Session, account: Account) -> Optional[Account]:
+        statement = select(Account)
+        for existing_account in session.exec(statement).all():
+            if self._payload_tuple(existing_account) == self._payload_tuple(account):
+                return existing_account
+        return None
+
     def add_account(self, account: Account) -> None:
         """向 Account 表新增一条账号记录，并回填数据库生成的字段。"""
         with Session(self.engine) as session:
+            session.add(account)
+            session.commit()
+            session.refresh(account)
+
+    def upsert_account(self, account: Account) -> None:
+        """按主键或业务字段执行 UPSERT；完全重复的数据不会重复插入。"""
+        with Session(self.engine) as session:
+            if account.aid is not None:
+                current_account = session.get(Account, account.aid)
+                if current_account is None:
+                    raise ValueError(f"Account {account.aid} not found")
+
+                if self._payload_tuple(current_account) == self._payload_tuple(account):
+                    self._sync_account_state(account, current_account)
+                    return
+
+                self._apply_account_updates(current_account, account)
+                session.add(current_account)
+                session.commit()
+                session.refresh(current_account)
+                self._sync_account_state(account, current_account)
+                return
+
+            existing_account = self._find_matching_account(session, account)
+            if existing_account is not None:
+                self._sync_account_state(account, existing_account)
+                return
+
             session.add(account)
             session.commit()
             session.refresh(account)
@@ -39,14 +103,7 @@ class AccountManager:
             if current_account is None:
                 raise ValueError(f"Account {aid} not found")
 
-            current_account.cid = account.cid
-            current_account.pid = account.pid
-            current_account.account = account.account
-            current_account.nickname = account.nickname
-            current_account.avatar = account.avatar
-            current_account.sids = account.sids
-            current_account.extra = account.extra
-            current_account.updated_time = utc_now()
+            self._apply_account_updates(current_account, account)
 
             session.add(current_account)
             session.commit()

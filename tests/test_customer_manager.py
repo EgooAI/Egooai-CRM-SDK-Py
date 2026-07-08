@@ -4,9 +4,9 @@ from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import CustomerManager, bootstrap_engine
+from core import CustomerManager
 from models import Customer
-from utils import utc_now
+from utils import bootstrap_engine, utc_now
 
 
 class CustomerManagerTestCase(unittest.TestCase):
@@ -142,6 +142,64 @@ class CustomerManagerTestCase(unittest.TestCase):
     def test_delete_customer_missing_is_no_op(self) -> None:
         self.manager.delete_customer(404)
         self.assertEqual(self.manager.list_customer(), [])
+
+    def test_upsert_customer_inserts_when_missing(self) -> None:
+        customer = self._build_customer(name="Cindy")
+
+        self.manager.upsert_customer(customer)
+
+        self.assertIsNotNone(customer.cid)
+        self.assertEqual(len(self.manager.list_customer()), 1)
+
+    def test_upsert_customer_updates_existing_customer_fields(self) -> None:
+        customer = self._build_customer()
+        self.manager.add_customer(customer)
+        original_created_time = customer.created_time
+        original_updated_time = customer.updated_time
+
+        updated_customer = Customer(
+            cid=customer.cid,
+            name="Alice Updated",
+            sex="F",
+            birthdate=date(1996, 6, 2),
+            region="Shenzhen",
+            extra={"level": 3},
+            image={"avatar": "alice-updated.png"},
+        )
+
+        self.manager.upsert_customer(updated_customer)
+        saved_customer = self.manager.get_customer(customer.cid)
+
+        self.assertIsNotNone(saved_customer)
+        assert saved_customer is not None
+        self.assertEqual(saved_customer.name, "Alice Updated")
+        self.assertEqual(saved_customer.region, "Shenzhen")
+        self.assertEqual(saved_customer.created_time, original_created_time)
+        self.assertGreaterEqual(saved_customer.updated_time, original_updated_time)
+
+    def test_upsert_customer_skips_duplicate_payload_without_primary_key(self) -> None:
+        customer = self._build_customer()
+        self.manager.add_customer(customer)
+        duplicate_customer = self._build_customer()
+
+        self.manager.upsert_customer(duplicate_customer)
+
+        self.assertEqual(len(self.manager.list_customer()), 1)
+        self.assertEqual(duplicate_customer.cid, customer.cid)
+
+    def test_upsert_customer_raises_when_explicit_primary_key_missing(self) -> None:
+        missing_customer = Customer(
+            cid=999,
+            name="Ghost",
+            sex="M",
+            birthdate=date(2000, 1, 1),
+            region="Nowhere",
+            extra={"level": 0},
+            image={"avatar": "ghost.png"},
+        )
+
+        with self.assertRaises(ValueError):
+            self.manager.upsert_customer(missing_customer)
 
     def test_bootstrap_engine_creates_database_file_for_explicit_path(self) -> None:
         database_path, engine = bootstrap_engine(self.db_path)
