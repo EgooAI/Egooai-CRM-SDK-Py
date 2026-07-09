@@ -47,6 +47,10 @@ class AccountManagerTestCase(unittest.TestCase):
             extra={"level": 1},
         )
 
+    def test_managers_share_engine_for_same_database_path(self) -> None:
+        self.assertIs(self.manager.engine, self.customer_manager.engine)
+        self.assertIs(self.manager.engine, self.platform_manager.engine)
+
     def test_auto_creates_account_table(self) -> None:
         self.assertTrue(self.db_path.exists())
 

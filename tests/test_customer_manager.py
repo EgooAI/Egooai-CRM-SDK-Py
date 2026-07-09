@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 import unittest
 from datetime import date
 from pathlib import Path
@@ -208,6 +209,78 @@ class CustomerManagerTestCase(unittest.TestCase):
             self.assertTrue(database_path.exists())
         finally:
             engine.dispose()
+
+    def test_bootstrap_engine_reuses_shared_engine_for_same_path(self) -> None:
+        first_path, first_engine = bootstrap_engine(self.db_path)
+        second_path, second_engine = bootstrap_engine(self.db_path)
+        try:
+            self.assertEqual(first_path, second_path)
+            self.assertIs(first_engine, second_engine)
+        finally:
+            first_engine.dispose()
+
+    def test_bootstrap_engine_reuses_shared_engine_for_resolved_relative_path(self) -> None:
+        relative_path = Path("tests-temp") / "nested" / "customer.sqlite"
+
+        first_path, first_engine = bootstrap_engine(relative_path)
+        second_path, second_engine = bootstrap_engine(relative_path.resolve())
+        try:
+            self.assertEqual(first_path, relative_path.resolve())
+            self.assertEqual(first_path, second_path)
+            self.assertTrue(first_path.exists())
+            self.assertIs(first_engine, second_engine)
+        finally:
+            first_engine.dispose()
+            if first_path.exists():
+                first_path.unlink()
+            parent = first_path.parent
+            while parent.name != "Egooai-CRM-SDK-Py" and parent.exists():
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
+                parent = parent.parent
+
+    def test_bootstrap_engine_dispose_rebuilds_shared_engine(self) -> None:
+        _, first_engine = bootstrap_engine(self.db_path)
+        first_engine.dispose()
+        _, second_engine = bootstrap_engine(self.db_path)
+        try:
+            self.assertIsNot(first_engine, second_engine)
+        finally:
+            second_engine.dispose()
+
+    def test_bootstrap_engine_dispose_is_idempotent(self) -> None:
+        _, engine = bootstrap_engine(self.db_path)
+
+        engine.dispose()
+        engine.dispose()
+
+    def test_bootstrap_engine_supports_cross_thread_sessions(self) -> None:
+        manager = CustomerManager(database_path=self.db_path)
+        results: list[str] = []
+        errors: list[BaseException] = []
+
+        def _worker(name: str) -> None:
+            try:
+                customer = Customer(name=name)
+                manager.add_customer(customer)
+                results.append(name)
+            except BaseException as exc:  # pragma: no cover - test captures thread failures
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=_worker, args=("Alice",)),
+            threading.Thread(target=_worker, args=("Bella",)),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
+        self.assertCountEqual(results, ["Alice", "Bella"])
+        self.assertEqual(len(manager.list_customer()), 2)
 
     def test_bootstrap_engine_resolves_relative_database_path(self) -> None:
         relative_path = Path("tests-temp") / "nested" / "customer.sqlite"

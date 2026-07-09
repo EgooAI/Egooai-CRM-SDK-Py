@@ -17,6 +17,17 @@ The repository currently provides CRUD-style managers and models for:
 
 All managers are exported from `core`, and all data models are exported from `models`.
 
+## Engine lifecycle and thread safety
+
+Managers that point to the same resolved SQLite path share one underlying engine. The engine lifecycle is managed centrally by `bootstrap_engine()` in `utils`.
+
+Concurrency policy:
+
+- The engine is safe to share across threads.
+- Sessions are **not** shared across threads; each manager method opens its own short-lived `Session`.
+- SQLite supports concurrent reads, but writes still contend on the database lock and may wait up to the configured timeout.
+- `manager.engine.dispose()` releases the shared engine for that database path. It is safe to call more than once, but application code should avoid calling it frequently during normal operation.
+
 ## Installation
 
 Requirements:
@@ -89,7 +100,11 @@ message_manager.add_message(message)
 - `PlatformManager`
 - `SessionMetaManager`
 - `TranslateManager`
+
+## Public utilities
+
 - `bootstrap_engine`
+- `utc_now`
 
 ## Tests
 
