@@ -1,11 +1,9 @@
-from typing import Optional
-
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
 class AgentPreset(SQLModel, table=True):
-    apid: Optional[int] = Field(default=None, primary_key=True)
+    apid: str = Field(primary_key=True)
     name: str
     description: str
     prompt: str

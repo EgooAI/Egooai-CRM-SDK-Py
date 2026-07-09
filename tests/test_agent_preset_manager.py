@@ -21,6 +21,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
 
     def _build_agent_preset(
         self,
+        apid: str = "default-assistant",
         name: str = "default assistant",
         description: str = "General customer service preset",
         prompt: str = "Help the customer politely",
@@ -28,6 +29,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         tools: list[str] | None = None,
     ) -> AgentPreset:
         payload = {
+            "apid": apid,
             "name": name,
             "description": description,
             "prompt": prompt,
@@ -48,12 +50,12 @@ class AgentPresetManagerTestCase(unittest.TestCase):
 
         self.assertIn("agentpreset", tables)
 
-    def test_add_agent_preset_populates_primary_key(self) -> None:
+    def test_add_agent_preset_keeps_external_primary_key(self) -> None:
         agent_preset = self._build_agent_preset()
 
         self.manager.add_agent_preset(agent_preset)
 
-        self.assertIsNotNone(agent_preset.apid)
+        self.assertEqual(agent_preset.apid, "default-assistant")
 
     def test_get_agent_preset_returns_inserted_record(self) -> None:
         agent_preset = self._build_agent_preset(tools=["web_search", "calculator"])
@@ -70,7 +72,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_agent_preset.tools, ["web_search", "calculator"])
 
     def test_get_agent_preset_returns_none_when_missing(self) -> None:
-        self.assertIsNone(self.manager.get_agent_preset(9999))
+        self.assertIsNone(self.manager.get_agent_preset("missing"))
 
     def test_add_agent_preset_defaults_tools_to_empty_list(self) -> None:
         agent_preset = self._build_agent_preset()
@@ -83,8 +85,8 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_agent_preset.tools, [])
 
     def test_list_agent_preset_returns_all_records_in_apid_order(self) -> None:
-        first = self._build_agent_preset(name="preset-a", intelevel=1)
-        second = self._build_agent_preset(name="preset-b", intelevel=3, tools=["browser"])
+        first = self._build_agent_preset(apid="preset-a", name="preset-a", intelevel=1)
+        second = self._build_agent_preset(apid="preset-b", name="preset-b", intelevel=3, tools=["browser"])
 
         self.manager.add_agent_preset(first)
         self.manager.add_agent_preset(second)
@@ -99,6 +101,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         self.manager.add_agent_preset(agent_preset)
 
         updated_agent_preset = AgentPreset(
+            apid=agent_preset.apid,
             name="sales closer",
             description="Preset for closing enterprise leads",
             prompt="Convert qualified leads into contracts",
@@ -122,7 +125,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         updated_agent_preset = self._build_agent_preset()
 
         with self.assertRaises(ValueError):
-            self.manager.edit_agent_preset(404, updated_agent_preset)
+            self.manager.edit_agent_preset("missing", updated_agent_preset)
 
     def test_delete_agent_preset_removes_record(self) -> None:
         agent_preset = self._build_agent_preset()
@@ -134,7 +137,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         self.assertEqual(self.manager.list_agent_preset(), [])
 
     def test_delete_agent_preset_missing_is_no_op(self) -> None:
-        self.manager.delete_agent_preset(404)
+        self.manager.delete_agent_preset("missing")
         self.assertEqual(self.manager.list_agent_preset(), [])
 
     def test_add_agent_preset_rejects_intelevel_below_zero(self) -> None:
@@ -158,7 +161,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
             self.manager.edit_agent_preset(agent_preset.apid, updated_agent_preset)
 
     def test_upsert_agent_preset_inserts_when_missing(self) -> None:
-        agent_preset = self._build_agent_preset(name="preset-upsert")
+        agent_preset = self._build_agent_preset(apid="preset-upsert", name="preset-upsert")
 
         self.manager.upsert_agent_preset(agent_preset)
 
@@ -185,7 +188,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_agent_preset.name, "preset-updated")
         self.assertEqual(saved_agent_preset.tools, ["calendar"])
 
-    def test_upsert_agent_preset_skips_duplicate_payload_without_primary_key(self) -> None:
+    def test_upsert_agent_preset_skips_duplicate_payload_with_same_apid(self) -> None:
         agent_preset = self._build_agent_preset()
         self.manager.add_agent_preset(agent_preset)
         duplicate_agent_preset = self._build_agent_preset()
@@ -195,9 +198,9 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         self.assertEqual(len(self.manager.list_agent_preset()), 1)
         self.assertEqual(duplicate_agent_preset.apid, agent_preset.apid)
 
-    def test_upsert_agent_preset_raises_when_explicit_primary_key_missing(self) -> None:
+    def test_upsert_agent_preset_inserts_new_external_primary_key(self) -> None:
         missing_agent_preset = AgentPreset(
-            apid=999,
+            apid="ghost",
             name="ghost",
             description="missing preset",
             prompt="ghost prompt",
@@ -205,8 +208,9 @@ class AgentPresetManagerTestCase(unittest.TestCase):
             tools=[],
         )
 
-        with self.assertRaises(ValueError):
-            self.manager.upsert_agent_preset(missing_agent_preset)
+        self.manager.upsert_agent_preset(missing_agent_preset)
+
+        self.assertIsNotNone(self.manager.get_agent_preset("ghost"))
 
     def test_upsert_agent_preset_rejects_invalid_intelevel(self) -> None:
         invalid_agent_preset = self._build_agent_preset(intelevel=5)

@@ -14,6 +14,11 @@ class AgentPresetManager:
         self._lock = get_database_lock(self.database_path)
 
     @staticmethod
+    def _validate_apid(apid: str) -> None:
+        if not apid:
+            raise ValueError("apid must not be empty")
+
+    @staticmethod
     def _validate_intelevel(intelevel: int) -> None:
         if not 0 <= intelevel <= 4:
             raise ValueError("intelevel must be between 0 and 4")
@@ -48,6 +53,7 @@ class AgentPresetManager:
         return None
 
     def add_agent_preset(self, agent_preset: AgentPreset) -> None:
+        self._validate_apid(agent_preset.apid)
         self._validate_intelevel(agent_preset.intelevel)
 
         with self._lock:
@@ -57,36 +63,29 @@ class AgentPresetManager:
                 session.refresh(agent_preset)
 
     def upsert_agent_preset(self, agent_preset: AgentPreset) -> None:
+        self._validate_apid(agent_preset.apid)
         self._validate_intelevel(agent_preset.intelevel)
 
         with self._lock:
             with Session(self.engine) as session:
-                if agent_preset.apid is not None:
-                    current_agent_preset = session.get(AgentPreset, agent_preset.apid)
-                    if current_agent_preset is None:
-                        raise ValueError(f"AgentPreset {agent_preset.apid} not found")
-
-                    if self._payload_tuple(current_agent_preset) == self._payload_tuple(agent_preset):
-                        self._sync_agent_preset_state(agent_preset, current_agent_preset)
-                        return
-
-                    self._apply_agent_preset_updates(current_agent_preset, agent_preset)
-                    session.add(current_agent_preset)
+                current_agent_preset = session.get(AgentPreset, agent_preset.apid)
+                if current_agent_preset is None:
+                    session.add(agent_preset)
                     session.commit()
-                    session.refresh(current_agent_preset)
+                    session.refresh(agent_preset)
+                    return
+
+                if self._payload_tuple(current_agent_preset) == self._payload_tuple(agent_preset):
                     self._sync_agent_preset_state(agent_preset, current_agent_preset)
                     return
 
-                existing_agent_preset = self._find_matching_agent_preset(session, agent_preset)
-                if existing_agent_preset is not None:
-                    self._sync_agent_preset_state(agent_preset, existing_agent_preset)
-                    return
-
-                session.add(agent_preset)
+                self._apply_agent_preset_updates(current_agent_preset, agent_preset)
+                session.add(current_agent_preset)
                 session.commit()
-                session.refresh(agent_preset)
+                session.refresh(current_agent_preset)
+                self._sync_agent_preset_state(agent_preset, current_agent_preset)
 
-    def delete_agent_preset(self, apid: int) -> None:
+    def delete_agent_preset(self, apid: str) -> None:
         with self._lock:
             with Session(self.engine) as session:
                 current_agent_preset = session.get(AgentPreset, apid)
@@ -96,7 +95,7 @@ class AgentPresetManager:
                 session.delete(current_agent_preset)
                 session.commit()
 
-    def edit_agent_preset(self, apid: int, agent_preset: AgentPreset) -> None:
+    def edit_agent_preset(self, apid: str, agent_preset: AgentPreset) -> None:
         self._validate_intelevel(agent_preset.intelevel)
 
         with self._lock:
@@ -111,7 +110,7 @@ class AgentPresetManager:
                 session.commit()
                 session.refresh(current_agent_preset)
 
-    def get_agent_preset(self, apid: int) -> Optional[AgentPreset]:
+    def get_agent_preset(self, apid: str) -> Optional[AgentPreset]:
         with Session(self.engine) as session:
             return session.get(AgentPreset, apid)
 

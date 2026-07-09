@@ -139,6 +139,7 @@ class ThreadPoolSchedulerTestCase(unittest.TestCase):
                 self.agent_preset_manager,
                 self.agent_preset_manager.upsert_agent_preset,
                 AgentPreset(
+                    apid="default-assistant",
                     name="default assistant",
                     description="General customer service preset",
                     prompt="Help the customer politely",
