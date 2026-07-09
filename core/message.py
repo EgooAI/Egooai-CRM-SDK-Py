@@ -41,7 +41,7 @@ class MessageManager:
     def upsert_message(self, message: Message) -> None:
         with self._lock:
             with Session(self.engine) as session:
-                current_message = session.get(Message, message.extrenal_mid)
+                current_message = session.get(Message, message.external_mid)
                 if current_message is None:
                     session.add(message)
                     session.commit()
@@ -56,22 +56,22 @@ class MessageManager:
                 session.commit()
                 session.refresh(current_message)
 
-    def delete_message(self, extrenal_mid: str) -> None:
+    def delete_message(self, external_mid: str) -> None:
         with self._lock:
             with Session(self.engine) as session:
-                current_message = session.get(Message, extrenal_mid)
+                current_message = session.get(Message, external_mid)
                 if current_message is None:
                     return
 
                 session.delete(current_message)
                 session.commit()
 
-    def edit_message(self, extrenal_mid: str, message: Message) -> None:
+    def edit_message(self, external_mid: str, message: Message) -> None:
         with self._lock:
             with Session(self.engine) as session:
-                current_message = session.get(Message, extrenal_mid)
+                current_message = session.get(Message, external_mid)
                 if current_message is None:
-                    raise ValueError(f"Message {extrenal_mid} not found")
+                    raise ValueError(f"Message {external_mid} not found")
 
                 self._apply_message_updates(current_message, message)
 
@@ -79,14 +79,14 @@ class MessageManager:
                 session.commit()
                 session.refresh(current_message)
 
-    def get_message(self, extrenal_mid: str) -> Optional[Message]:
+    def get_message(self, external_mid: str) -> Optional[Message]:
         with Session(self.engine) as session:
-            return session.get(Message, extrenal_mid)
+            return session.get(Message, external_mid)
 
     def list_message(self) -> list[Message]:
         with Session(self.engine) as session:
-            extrenal_mid_column = inspect(Message).columns.extrenal_mid
-            statement = select(Message).order_by(extrenal_mid_column)
+            external_mid_column = inspect(Message).columns.external_mid
+            statement = select(Message).order_by(external_mid_column)
             return list(session.exec(statement).all())
 
 

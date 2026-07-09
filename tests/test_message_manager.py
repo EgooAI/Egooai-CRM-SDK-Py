@@ -66,12 +66,12 @@ class MessageManagerTestCase(unittest.TestCase):
 
     def _build_message(
         self,
-        extrenal_mid: str = "msg-001",
+        external_mid: str = "msg-001",
         sid: int = 1,
         sender: int = 1,
     ) -> Message:
         return Message(
-            extrenal_mid=extrenal_mid,
+            external_mid=external_mid,
             sid=sid,
             sender=sender,
             read=False,
@@ -97,7 +97,7 @@ class MessageManagerTestCase(unittest.TestCase):
 
         self.manager.add_message(message)
 
-        self.assertEqual(message.extrenal_mid, "msg-001")
+        self.assertEqual(message.external_mid, "msg-001")
 
     def test_get_message_returns_inserted_record(self) -> None:
         account = self._add_account()
@@ -105,7 +105,7 @@ class MessageManagerTestCase(unittest.TestCase):
         message = self._build_message(sid=session_meta.sid, sender=account.aid)
         self.manager.add_message(message)
 
-        saved_message = self.manager.get_message(message.extrenal_mid)
+        saved_message = self.manager.get_message(message.external_mid)
 
         self.assertIsNotNone(saved_message)
         assert saved_message is not None
@@ -122,7 +122,7 @@ class MessageManagerTestCase(unittest.TestCase):
         account = self._add_account()
         session_meta = self._add_session_meta()
         message = Message(
-            extrenal_mid="msg-null-read",
+            external_mid="msg-null-read",
             sid=session_meta.sid,
             sender=account.aid,
             read=None,
@@ -131,7 +131,7 @@ class MessageManagerTestCase(unittest.TestCase):
         )
 
         self.manager.add_message(message)
-        saved_message = self.manager.get_message(message.extrenal_mid)
+        saved_message = self.manager.get_message(message.external_mid)
 
         self.assertIsNotNone(saved_message)
         assert saved_message is not None
@@ -163,7 +163,7 @@ class MessageManagerTestCase(unittest.TestCase):
         second_session_meta = self._add_session_meta("session-b")
         first = self._build_message("msg-001", sid=first_session_meta.sid, sender=first_account.aid)
         second = Message(
-            extrenal_mid="msg-002",
+            external_mid="msg-002",
             sid=second_session_meta.sid,
             sender=second_account.aid,
             read=True,
@@ -176,7 +176,7 @@ class MessageManagerTestCase(unittest.TestCase):
 
         messages = self.manager.list_message()
 
-        self.assertEqual([message.extrenal_mid for message in messages], ["msg-001", "msg-002"])
+        self.assertEqual([message.external_mid for message in messages], ["msg-001", "msg-002"])
         self.assertEqual([message.type for message in messages], ["text", "image"])
 
     def test_edit_message_updates_fields(self) -> None:
@@ -193,7 +193,7 @@ class MessageManagerTestCase(unittest.TestCase):
         self.manager.add_message(message)
 
         updated_message = Message(
-            extrenal_mid="ignored-mid",
+            external_mid="ignored-mid",
             sid=second_session_meta.sid,
             sender=second_account.aid,
             read=True,
@@ -201,8 +201,8 @@ class MessageManagerTestCase(unittest.TestCase):
             type="card",
         )
 
-        self.manager.edit_message(message.extrenal_mid, updated_message)
-        saved_message = self.manager.get_message(message.extrenal_mid)
+        self.manager.edit_message(message.external_mid, updated_message)
+        saved_message = self.manager.get_message(message.external_mid)
 
         self.assertIsNotNone(saved_message)
         assert saved_message is not None
@@ -226,9 +226,9 @@ class MessageManagerTestCase(unittest.TestCase):
         message = self._build_message(sid=session_meta.sid, sender=account.aid)
         self.manager.add_message(message)
 
-        self.manager.delete_message(message.extrenal_mid)
+        self.manager.delete_message(message.external_mid)
 
-        self.assertIsNone(self.manager.get_message(message.extrenal_mid))
+        self.assertIsNone(self.manager.get_message(message.external_mid))
         self.assertEqual(self.manager.list_message(), [])
 
     def test_delete_message_missing_is_no_op(self) -> None:
@@ -238,11 +238,11 @@ class MessageManagerTestCase(unittest.TestCase):
     def test_upsert_message_inserts_when_missing(self) -> None:
         account = self._add_account()
         session_meta = self._add_session_meta()
-        message = self._build_message(extrenal_mid="msg-upsert", sid=session_meta.sid, sender=account.aid)
+        message = self._build_message(external_mid="msg-upsert", sid=session_meta.sid, sender=account.aid)
 
         self.manager.upsert_message(message)
 
-        self.assertEqual(message.extrenal_mid, "msg-upsert")
+        self.assertEqual(message.external_mid, "msg-upsert")
         self.assertEqual(len(self.manager.list_message()), 1)
 
     def test_upsert_message_updates_existing_fields(self) -> None:
@@ -258,7 +258,7 @@ class MessageManagerTestCase(unittest.TestCase):
         message = self._build_message(sid=first_session_meta.sid, sender=first_account.aid)
         self.manager.add_message(message)
         updated_message = Message(
-            extrenal_mid=message.extrenal_mid,
+            external_mid=message.external_mid,
             sid=second_session_meta.sid,
             sender=second_account.aid,
             read=True,
@@ -267,7 +267,7 @@ class MessageManagerTestCase(unittest.TestCase):
         )
 
         self.manager.upsert_message(updated_message)
-        saved_message = self.manager.get_message(message.extrenal_mid)
+        saved_message = self.manager.get_message(message.external_mid)
 
         self.assertIsNotNone(saved_message)
         assert saved_message is not None
@@ -283,7 +283,7 @@ class MessageManagerTestCase(unittest.TestCase):
         message = self._build_message(sid=session_meta.sid, sender=account.aid)
         self.manager.add_message(message)
         duplicate_message = Message(
-            extrenal_mid=message.extrenal_mid,
+            external_mid=message.external_mid,
             sid=session_meta.sid,
             sender=account.aid,
             read=False,
@@ -296,7 +296,7 @@ class MessageManagerTestCase(unittest.TestCase):
         self.assertEqual(len(self.manager.list_message()), 1)
 
     def test_upsert_message_enforces_foreign_keys(self) -> None:
-        invalid_message = self._build_message(extrenal_mid="msg-invalid", sid=9999, sender=9999)
+        invalid_message = self._build_message(external_mid="msg-invalid", sid=9999, sender=9999)
 
         with self.assertRaises(IntegrityError):
             self.manager.upsert_message(invalid_message)

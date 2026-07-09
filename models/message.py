@@ -5,7 +5,7 @@ from sqlmodel import Field, SQLModel
 
 
 class Message(SQLModel, table=True):
-    extrenal_mid: str = Field(primary_key=True)
+    external_mid: str = Field(primary_key=True)
     sid: int = Field(foreign_key="sessionmeta.sid")
     sender: int = Field(foreign_key="account.aid")
     read: Optional[bool] = Field(default=None)
