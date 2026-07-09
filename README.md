@@ -19,14 +19,18 @@ All managers are exported from `core`, and all data models are exported from `mo
 
 ## Engine lifecycle and thread safety
 
-Managers that point to the same resolved SQLite path share one underlying engine. The engine lifecycle is managed centrally by `bootstrap_engine()` in `utils`.
+Managers that point to the same resolved SQLite path share one underlying engine. The engine lifecycle is managed centrally by `bootstrap_engine()` in `utils.common`.
 
 Concurrency policy:
 
 - The engine is safe to share across threads.
+- Managers that point to the same resolved database path also share one process-local database lock for write methods.
 - Sessions are **not** shared across threads; each manager method opens its own short-lived `Session`.
+- Read methods can still run concurrently, but write methods are serialized inside the current Python process.
+- `MetaManager.get_version()` is treated as a read-write method because it may create the default singleton row.
 - SQLite supports concurrent reads, but writes still contend on the database lock and may wait up to the configured timeout.
-- `manager.engine.dispose()` releases the shared engine for that database path. It is safe to call more than once, but application code should avoid calling it frequently during normal operation.
+- The locking strategy only guarantees serialization inside the current Python process; cross-process coordination still relies on SQLite itself.
+- `manager.engine.dispose()` releases the shared engine for that database path. It is safe to call more than once, but application code should avoid calling it frequently during normal operation or while other threads are actively using managers.
 
 ## Installation
 
@@ -103,8 +107,35 @@ message_manager.add_message(message)
 
 ## Public utilities
 
-- `bootstrap_engine`
-- `utc_now`
+- `utils.bootstrap_engine`
+- `utils.utc_now`
+- `utils.ThreadPoolScheduler`
+
+Compatibility aliases:
+
+- `config.bootstrap_engine`
+- `config.scheduler.ThreadPoolScheduler`
+- `scheduler.ThreadPoolScheduler`
+
+## Queued thread-pool scheduling
+
+Use `ThreadPoolScheduler` when you want same-database tasks to execute strictly in submission order while different databases can still run in parallel.
+
+```python
+from utils import ThreadPoolScheduler
+
+with ThreadPoolScheduler(max_workers=4) as scheduler:
+    future = scheduler.submit_manager_call(customer_manager, customer_manager.add_customer, customer)
+    future.result()
+```
+
+Scheduling guarantees:
+
+- Tasks targeting the same resolved `database_path` run and finish strictly in submission order.
+- Tasks targeting different resolved database paths may run in parallel.
+- Exceptions are re-raised from `future.result()`.
+- Shutdown prevents new task submission.
+- Wait for `future.result()` before reading model fields that are backfilled by manager methods.
 
 ## Tests
 

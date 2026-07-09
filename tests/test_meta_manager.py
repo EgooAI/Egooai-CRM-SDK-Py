@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 import unittest
 from datetime import timezone
 from pathlib import Path
@@ -99,6 +100,26 @@ class MetaManagerTestCase(unittest.TestCase):
         self.assertEqual(self._count_rows(), 1)
         self.assertEqual(duplicate_meta.key, "build")
         self.assertEqual(duplicate_meta.value, "42")
+
+    def test_concurrent_get_version_creates_singleton_row_once(self) -> None:
+        results: list[str] = []
+        errors: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                results.append(self.manager.get_version())
+            except BaseException as exc:  # pragma: no cover - test captures thread failures
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual(results, ["1.0.0", "1.0.0"])
+        self.assertEqual(self._count_rows(), 1)
 
     def test_model_is_exported(self) -> None:
         meta = Meta()

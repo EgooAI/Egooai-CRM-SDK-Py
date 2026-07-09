@@ -5,12 +5,13 @@ from sqlalchemy import inspect
 from sqlmodel import Session, select
 
 from models.message import Message
-from utils.common import bootstrap_engine
+from utils.common import bootstrap_engine, get_database_lock
 
 
 class MessageManager:
     def __init__(self, database_path: Optional[Path | str] = None) -> None:
         self.database_path, self.engine = bootstrap_engine(database_path)
+        self._lock = get_database_lock(self.database_path)
 
     @staticmethod
     def _payload_tuple(message: Message) -> tuple[object, ...]:
@@ -31,48 +32,52 @@ class MessageManager:
         current_message.type = message.type
 
     def add_message(self, message: Message) -> None:
-        with Session(self.engine) as session:
-            session.add(message)
-            session.commit()
-            session.refresh(message)
-
-    def upsert_message(self, message: Message) -> None:
-        with Session(self.engine) as session:
-            current_message = session.get(Message, message.extrenal_mid)
-            if current_message is None:
+        with self._lock:
+            with Session(self.engine) as session:
                 session.add(message)
                 session.commit()
                 session.refresh(message)
-                return
 
-            if self._payload_tuple(current_message) == self._payload_tuple(message):
-                return
+    def upsert_message(self, message: Message) -> None:
+        with self._lock:
+            with Session(self.engine) as session:
+                current_message = session.get(Message, message.extrenal_mid)
+                if current_message is None:
+                    session.add(message)
+                    session.commit()
+                    session.refresh(message)
+                    return
 
-            self._apply_message_updates(current_message, message)
-            session.add(current_message)
-            session.commit()
-            session.refresh(current_message)
+                if self._payload_tuple(current_message) == self._payload_tuple(message):
+                    return
+
+                self._apply_message_updates(current_message, message)
+                session.add(current_message)
+                session.commit()
+                session.refresh(current_message)
 
     def delete_message(self, extrenal_mid: str) -> None:
-        with Session(self.engine) as session:
-            current_message = session.get(Message, extrenal_mid)
-            if current_message is None:
-                return
+        with self._lock:
+            with Session(self.engine) as session:
+                current_message = session.get(Message, extrenal_mid)
+                if current_message is None:
+                    return
 
-            session.delete(current_message)
-            session.commit()
+                session.delete(current_message)
+                session.commit()
 
     def edit_message(self, extrenal_mid: str, message: Message) -> None:
-        with Session(self.engine) as session:
-            current_message = session.get(Message, extrenal_mid)
-            if current_message is None:
-                raise ValueError(f"Message {extrenal_mid} not found")
+        with self._lock:
+            with Session(self.engine) as session:
+                current_message = session.get(Message, extrenal_mid)
+                if current_message is None:
+                    raise ValueError(f"Message {extrenal_mid} not found")
 
-            self._apply_message_updates(current_message, message)
+                self._apply_message_updates(current_message, message)
 
-            session.add(current_message)
-            session.commit()
-            session.refresh(current_message)
+                session.add(current_message)
+                session.commit()
+                session.refresh(current_message)
 
     def get_message(self, extrenal_mid: str) -> Optional[Message]:
         with Session(self.engine) as session:

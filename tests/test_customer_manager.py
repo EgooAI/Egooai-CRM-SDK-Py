@@ -282,6 +282,24 @@ class CustomerManagerTestCase(unittest.TestCase):
         self.assertCountEqual(results, ["Alice", "Bella"])
         self.assertEqual(len(manager.list_customer()), 2)
 
+    def test_concurrent_upsert_customer_skips_duplicate_payload(self) -> None:
+        errors: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                self.manager.upsert_customer(self._build_customer())
+            except BaseException as exc:  # pragma: no cover - test captures thread failures
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(self.manager.list_customer()), 1)
+
     def test_bootstrap_engine_resolves_relative_database_path(self) -> None:
         relative_path = Path("tests-temp") / "nested" / "customer.sqlite"
 

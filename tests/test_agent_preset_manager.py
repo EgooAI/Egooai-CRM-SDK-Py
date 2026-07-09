@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -212,6 +213,24 @@ class AgentPresetManagerTestCase(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             self.manager.upsert_agent_preset(invalid_agent_preset)
+
+    def test_concurrent_upsert_agent_preset_skips_duplicate_payload(self) -> None:
+        errors: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                self.manager.upsert_agent_preset(self._build_agent_preset())
+            except BaseException as exc:  # pragma: no cover - test captures thread failures
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(self.manager.list_agent_preset()), 1)
 
 
 if __name__ == "__main__":

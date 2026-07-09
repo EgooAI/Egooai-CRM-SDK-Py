@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -64,6 +65,11 @@ class AccountMappingManagerTestCase(unittest.TestCase):
         key: str | None = "wx-open-id",
     ) -> AccountMapping:
         return AccountMapping(aid=aid, type=type_, key=key)
+
+    def test_managers_share_database_lock_for_same_path(self) -> None:
+        self.assertIs(self.manager._lock, self.account_manager._lock)
+        self.assertIs(self.manager._lock, self.customer_manager._lock)
+        self.assertIs(self.manager._lock, self.platform_manager._lock)
 
     def test_auto_creates_account_mapping_table(self) -> None:
         self.assertTrue(self.db_path.exists())
@@ -249,6 +255,25 @@ class AccountMappingManagerTestCase(unittest.TestCase):
 
         with self.assertRaises(IntegrityError):
             self.manager.upsert_account_mapping(account_mapping)
+
+    def test_concurrent_upsert_account_mapping_skips_duplicate_payload(self) -> None:
+        account = self._add_account()
+        errors: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                self.manager.upsert_account_mapping(AccountMapping(aid=account.aid, type="openid", key="wx-open-id"))
+            except BaseException as exc:  # pragma: no cover - test captures thread failures
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(self.manager.list_account_mapping()), 1)
 
 
 if __name__ == "__main__":
