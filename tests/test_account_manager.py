@@ -113,9 +113,10 @@ class AccountManagerTestCase(unittest.TestCase):
     def test_get_account_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_account(9999))
 
-    def test_add_account_accepts_nullable_identity_fields(self) -> None:
+    def test_add_account_accepts_nullable_optional_fields(self) -> None:
+        customer = self._add_customer(name="Nullable User")
         account = Account(
-            cid=None,
+            cid=customer.cid,
             pid=None,
             account=None,
             nickname=None,
@@ -129,11 +130,25 @@ class AccountManagerTestCase(unittest.TestCase):
 
         self.assertIsNotNone(saved_account)
         assert saved_account is not None
-        self.assertIsNone(saved_account.cid)
+        self.assertEqual(saved_account.cid, customer.cid)
         self.assertIsNone(saved_account.pid)
         self.assertIsNone(saved_account.account)
         self.assertIsNone(saved_account.nickname)
         self.assertIsNone(saved_account.avatar)
+
+    def test_add_account_requires_non_null_customer(self) -> None:
+        account = Account(
+            cid=None,
+            pid=None,
+            account="missing-customer@example.com",
+            nickname="Missing Customer",
+            avatar=None,
+            sids=None,
+            extra=None,
+        )
+
+        with self.assertRaises(IntegrityError):
+            self.manager.add_account(account)
 
     def test_add_account_enforces_customer_and_platform_foreign_keys(self) -> None:
         account = Account(

@@ -9,7 +9,7 @@ from utils.common import utc_now
 
 class Account(SQLModel, table=True):
     aid: Optional[int] = Field(default=None, primary_key=True)
-    cid: Optional[int] = Field(default=None, foreign_key="customer.cid")
+    cid: int = Field(foreign_key="customer.cid")
     pid: Optional[str] = Field(default=None, foreign_key="platform.pid")
     account: Optional[str] = Field(default=None)
     nickname: Optional[str] = Field(default=None)
