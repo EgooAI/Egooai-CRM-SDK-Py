@@ -105,6 +105,42 @@ class AgentPipelineTestCase(unittest.TestCase):
         assert client.requests[1].tool_result is not None
         self.assertEqual(client.requests[1].tool_result.content, {"keyword": "Alice", "match": "Alice"})
 
+    def test_run_can_execute_multiple_tool_rounds(self) -> None:
+        register_llm(2, self._build_llm_config())
+        register_tool("first_tool", lambda keyword: {"keyword": keyword, "step": 1})
+        register_tool("second_tool", lambda keyword: {"keyword": keyword, "step": 2})
+        preset = self._build_agent_preset(tools=["first_tool", "second_tool"])
+        client = StaticLLMClient([
+            LLMResponse(
+                text="need first tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="first_tool", tool_input={"keyword": "Alice"}),
+                raw={"turn": 1},
+            ),
+            LLMResponse(
+                text="need second tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="second_tool", tool_input={"keyword": "Bob"}),
+                raw={"turn": 2},
+            ),
+            LLMResponse(text="final answer", needs_tool=False, raw={"turn": 3}),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="find alice", agent_preset=preset)
+        )
+
+        self.assertEqual(result.output_text, "final answer")
+        self.assertEqual(result.iterations, 3)
+        self.assertIsNotNone(result.tool_call)
+        assert result.tool_call is not None
+        self.assertEqual(result.tool_call.name, "second_tool")
+        self.assertIsNotNone(result.tool_result)
+        assert result.tool_result is not None
+        self.assertEqual(result.tool_result.content, {"keyword": "Bob", "step": 2})
+        self.assertEqual(len(client.requests), 3)
+        self.assertEqual([request.tool_result.content if request.tool_result else None for request in client.requests], [None, {"keyword": "Alice", "step": 1}, {"keyword": "Bob", "step": 2}])
+
     def test_run_by_apid_uses_manager_resolution_path(self) -> None:
         register_llm(2, self._build_llm_config())
         preset = self._build_agent_preset(apid="saved", tools=[])
@@ -155,7 +191,7 @@ class AgentPipelineTestCase(unittest.TestCase):
         with self.assertRaises(LLMInvocationError):
             AgentPipeline(llm_client=client).run(AgentPipelineInput(user_input="hello", agent_preset=preset))
 
-    def test_run_raises_when_second_response_requests_more_tools(self) -> None:
+    def test_run_returns_unknown_after_more_than_five_tool_rounds(self) -> None:
         register_llm(2, self._build_llm_config())
         register_tool("search_customer", lambda keyword: {"keyword": keyword})
         preset = self._build_agent_preset(tools=["search_customer"])
@@ -170,10 +206,40 @@ class AgentPipelineTestCase(unittest.TestCase):
                 needs_tool=True,
                 tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Bob"}),
             ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Carol"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Dave"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Eve"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Frank"}),
+            ),
         ])
 
-        with self.assertRaises(LLMInvocationError):
-            AgentPipeline(llm_client=client).run(AgentPipelineInput(user_input="hello", agent_preset=preset))
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(result.output_text, "我不知道")
+        self.assertEqual(result.iterations, 6)
+        self.assertIsNotNone(result.tool_call)
+        assert result.tool_call is not None
+        self.assertEqual(result.tool_call.name, "search_customer")
+        self.assertIsNotNone(result.tool_result)
+        assert result.tool_result is not None
+        self.assertEqual(result.tool_result.content, {"keyword": "Eve"})
 
     def test_run_raises_tool_execution_error_when_callable_fails(self) -> None:
         register_llm(2, self._build_llm_config())

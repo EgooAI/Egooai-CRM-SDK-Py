@@ -36,6 +36,7 @@ class LLMRequest:
     tool_prompt: str
     tool_schemas: list[LLMToolSchema] = field(default_factory=list)
     tool_result: Optional["ToolExecutionResult"] = None
+    tool_results: list["ToolExecutionResult"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

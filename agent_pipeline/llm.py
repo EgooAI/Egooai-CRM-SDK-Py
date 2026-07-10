@@ -74,7 +74,7 @@ class OpenAICompatibleLLMClient:
         raise LLMInvocationError("Unsupported tool arguments payload")
 
     def _build_messages(self, request_payload: LLMRequest) -> list[dict[str, Any]]:
-        if request_payload.tool_result is None:
+        if not request_payload.tool_results:
             return [
                 {
                     "role": "system",
@@ -88,22 +88,24 @@ class OpenAICompatibleLLMClient:
                 {"role": "user", "content": request_payload.user_input},
             ]
 
+        tool_history = "\n".join(
+            f"{index}. {tool_result.name}: {json.dumps(tool_result.content, ensure_ascii=False)}"
+            for index, tool_result in enumerate(request_payload.tool_results, start=1)
+        )
         return [
             {
                 "role": "system",
                 "content": (
                     f"{request_payload.system_prompt}\n\n"
-                    "A tool has already been executed. Use the tool result to answer the user directly. "
-                    "Do not request another tool."
+                    f"{request_payload.tool_prompt}\n"
+                    "You may call another tool if the available information is still insufficient. "
+                    "If the current information is enough, answer the user directly."
                 ),
             },
             {"role": "user", "content": request_payload.user_input},
             {
                 "role": "system",
-                "content": (
-                    f"Tool result from {request_payload.tool_result.name}: "
-                    f"{json.dumps(request_payload.tool_result.content, ensure_ascii=False)}"
-                ),
+                "content": f"Executed tool results:\n{tool_history}",
             },
         ]
 
@@ -113,7 +115,7 @@ class OpenAICompatibleLLMClient:
             "messages": self._build_messages(request_payload),
             "temperature": 0,
         }
-        if request_payload.tool_result is None and request_payload.tool_schemas:
+        if request_payload.tool_schemas:
             payload["tools"] = [
                 {
                     "type": "function",

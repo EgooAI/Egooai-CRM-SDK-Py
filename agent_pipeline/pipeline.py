@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Optional
+from typing import Optional, get_type_hints
 
 from agent_pipeline.errors import AgentPresetResolutionError, LLMInvocationError
 from agent_pipeline.llm import LLMClient
@@ -11,23 +11,26 @@ from agent_pipeline.types import (
     AgentPipelineResult,
     LLMRequest,
     LLMToolSchema,
+    ToolExecutionResult,
 )
 from core.agent_preset import AgentPresetManager
 from core.agent_preset_resolver import AgentPresetRuntimeConfig, require_agent_preset_by_apid, resolve_agent_preset
 
 
 class AgentPipeline:
-    """Run an agent preset through one LLM step, one optional tool step, and a final LLM step."""
+    """Run an agent preset through repeated LLM and tool rounds."""
 
     def __init__(
         self,
         llm_client: LLMClient,
         manager: Optional[AgentPresetManager] = None,
         tool_executor: Optional[ToolExecutor] = None,
+        max_tool_rounds: int = 5,
     ) -> None:
         self.llm_client = llm_client
         self.manager = manager
         self.tool_executor = tool_executor or ToolExecutor()
+        self.max_tool_rounds = max_tool_rounds
 
     @staticmethod
     def _build_tool_prompt(tool_names: list[str]) -> str:
@@ -56,6 +59,7 @@ class AgentPipeline:
         schemas: list[LLMToolSchema] = []
         for tool_name, tool in zip(runtime.tool_names, runtime.tools, strict=False):
             signature = inspect.signature(tool)
+            type_hints = get_type_hints(tool)
             properties: dict[str, object] = {}
             required: list[str] = []
             for parameter in signature.parameters.values():
@@ -65,7 +69,7 @@ class AgentPipeline:
                 ):
                     continue
                 properties[parameter.name] = {
-                    "type": self._annotation_to_json_type(parameter.annotation),
+                    "type": self._annotation_to_json_type(type_hints.get(parameter.name, parameter.annotation)),
                 }
                 if parameter.default is inspect._empty:
                     required.append(parameter.name)
@@ -102,20 +106,11 @@ class AgentPipeline:
         except KeyError as exc:
             raise AgentPresetResolutionError(str(exc)) from exc
 
-    def _build_initial_request(self, runtime: AgentPresetRuntimeConfig, pipeline_input: AgentPipelineInput) -> LLMRequest:
-        return LLMRequest(
-            system_prompt=runtime.preset.prompt,
-            user_input=pipeline_input.user_input,
-            tool_names=runtime.tool_names,
-            tool_prompt=self._build_tool_prompt(runtime.tool_names),
-            tool_schemas=self._build_tool_schemas(runtime),
-        )
-
-    def _build_followup_request(
+    def _build_request(
         self,
         runtime: AgentPresetRuntimeConfig,
         pipeline_input: AgentPipelineInput,
-        tool_result,
+        tool_results: list[ToolExecutionResult],
     ) -> LLMRequest:
         return LLMRequest(
             system_prompt=runtime.preset.prompt,
@@ -123,47 +118,55 @@ class AgentPipeline:
             tool_names=runtime.tool_names,
             tool_prompt=self._build_tool_prompt(runtime.tool_names),
             tool_schemas=self._build_tool_schemas(runtime),
-            tool_result=tool_result,
+            tool_result=tool_results[-1] if tool_results else None,
+            tool_results=list(tool_results),
         )
 
     def run(self, pipeline_input: AgentPipelineInput) -> AgentPipelineResult:
         runtime = self._resolve_runtime(pipeline_input)
-        initial_request = self._build_initial_request(runtime, pipeline_input)
-        first_response = self.llm_client.invoke(initial_request)
+        tool_results: list[ToolExecutionResult] = []
+        raw_responses: list[object] = []
+        last_tool_call = None
+        iterations = 0
 
-        if not first_response.needs_tool:
-            return AgentPipelineResult(
-                status="completed",
-                runtime=runtime,
-                output_text=first_response.text,
-                iterations=1,
-                raw_responses=[first_response.raw],
+        while True:
+            request_payload = self._build_request(runtime, pipeline_input, tool_results)
+            response = self.llm_client.invoke(request_payload)
+            iterations += 1
+            raw_responses.append(response.raw)
+
+            if not response.needs_tool:
+                return AgentPipelineResult(
+                    status="completed",
+                    runtime=runtime,
+                    output_text=response.text,
+                    iterations=iterations,
+                    tool_call=last_tool_call,
+                    tool_result=tool_results[-1] if tool_results else None,
+                    raw_responses=raw_responses,
+                )
+
+            if response.tool_call is None:
+                raise LLMInvocationError("LLMResponse indicates tool usage but no tool_call was provided")
+
+            if len(tool_results) >= self.max_tool_rounds:
+                return AgentPipelineResult(
+                    status="completed",
+                    runtime=runtime,
+                    output_text="我不知道",
+                    iterations=iterations,
+                    tool_call=last_tool_call,
+                    tool_result=tool_results[-1] if tool_results else None,
+                    raw_responses=raw_responses,
+                )
+
+            last_tool_call = response.tool_call
+            tool_result = self.tool_executor.execute(
+                runtime,
+                response.tool_call.name,
+                response.tool_call.tool_input,
             )
-
-        if first_response.tool_call is None:
-            raise LLMInvocationError("LLMResponse indicates tool usage but no tool_call was provided")
-
-        tool_result = self.tool_executor.execute(
-            runtime,
-            first_response.tool_call.name,
-            first_response.tool_call.tool_input,
-        )
-
-        followup_request = self._build_followup_request(runtime, pipeline_input, tool_result)
-        second_response = self.llm_client.invoke(followup_request)
-
-        if second_response.needs_tool:
-            raise LLMInvocationError("Current AgentPipeline only supports a single tool round")
-
-        return AgentPipelineResult(
-            status="completed",
-            runtime=runtime,
-            output_text=second_response.text,
-            iterations=2,
-            tool_call=first_response.tool_call,
-            tool_result=tool_result,
-            raw_responses=[first_response.raw, second_response.raw],
-        )
+            tool_results.append(tool_result)
 
 
 def run_agent_preset(
