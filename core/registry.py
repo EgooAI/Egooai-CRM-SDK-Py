@@ -11,6 +11,11 @@ class LLMConfig:
     base_url: str
     api_key: str
     model_name: str
+    system_prompt: Optional[str] = None
+    context: Optional[int] = None
+    context_limit_output_text: Optional[str] = None
+    tool_round_limit_output_text: Optional[str] = None
+    max_tool_rounds: Optional[int] = None
 
 
 class ToolRegistry:

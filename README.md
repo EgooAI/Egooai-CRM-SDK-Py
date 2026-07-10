@@ -67,10 +67,11 @@ from core import register_tool, register_llm, tool_registry, llm_registry, resol
 1. 读取 `AgentPreset`
 2. 解析出 LLM 配置和工具列表
 3. 调用 LLM
-4. 如需工具，则执行一轮 tool call
-5. 再调用一次 LLM，生成最终回答
+4. 如需工具，则执行对应的 tool call
+5. 将工具结果回填给 LLM，继续下一轮
+6. 直到 LLM 直接返回最终回答，或触发上下文/工具轮次限制
 
-当前只支持 **单轮工具调用**。
+当前已支持 **多轮工具调用**；可通过 `max_tool_rounds` 控制上限。
 
 ## 快速开始
 
@@ -144,7 +145,16 @@ result = AgentPipeline(llm_client=client, manager=manager).run(
 )
 
 print(result.output_text)
+print(result.iterations)
 ```
+
+返回结果中常用字段包括：
+
+- `output_text`：最终输出文本，或命中限制时的兜底文案
+- `iterations`：实际进行了多少次 LLM 调用
+- `tool_call`：最后一次工具调用的请求信息
+- `tool_result`：最后一次工具调用的返回结果
+- `raw_responses`：底层 LLM 返回的原始响应列表，便于调试
 
 ## LLM 配置
 
@@ -155,17 +165,48 @@ print(result.output_text)
 先复制为 `llm_api.yaml`，再填写真实配置：
 
 ```yaml
-default:
-  base_url: "https://api.example.com/v1"
-  api_key: "replace-me"
-  model_name: "claude-opus-4-8"
-
 levels:
-  0: {}
-  1: {}
-  2: {}
-  3: {}
-  4: {}
+  0:
+    base_url: "https://api.example.com/v1"
+    api_key: "replace-me"
+    model_name: "claude-opus-4-8"
+    system_prompt: "You are a careful and policy-compliant assistant."
+    context: 12000
+    context_limit_output_text: "上下文超过限制"
+    tool_round_limit_output_text: "调用超过次数限制"
+  1:
+    base_url: "https://api.example.com/v1"
+    api_key: "replace-me"
+    model_name: "claude-opus-4-8"
+    system_prompt: "You are a careful and policy-compliant assistant."
+    context: 12000
+    context_limit_output_text: "上下文超过限制"
+    tool_round_limit_output_text: "调用超过次数限制"
+  2:
+    base_url: "https://api.example.com/v1"
+    api_key: "replace-me"
+    model_name: "claude-opus-4-8"
+    system_prompt: "You are a careful and policy-compliant assistant."
+    context: 12000
+    context_limit_output_text: "上下文超过限制"
+    tool_round_limit_output_text: "调用超过次数限制"
+    max_tool_rounds: 5
+  3:
+    base_url: "https://api.example.com/v1"
+    api_key: "replace-me"
+    model_name: "claude-opus-4-8"
+    system_prompt: "You are a careful and policy-compliant assistant."
+    context: 12000
+    context_limit_output_text: "上下文超过限制"
+    tool_round_limit_output_text: "调用超过次数限制"
+  4:
+    base_url: "https://api.example.com/v1"
+    api_key: "replace-me"
+    model_name: "claude-opus-4-8"
+    system_prompt: "You are a careful and policy-compliant assistant."
+    context: 12000
+    context_limit_output_text: "上下文超过限制"
+    tool_round_limit_output_text: "调用超过次数限制"
 ```
 
 加载方式：
@@ -176,9 +217,23 @@ from agent_pipeline.llm_api import register_default_llms
 register_default_llms()
 ```
 
+也可以显式指定配置文件路径：
+
+```python
+from agent_pipeline.llm_api import register_default_llms
+
+register_default_llms("./config/llm_api.yaml")
+```
+
 说明：
 
 - `AgentPreset.intelevel` 会映射到对应的 LLM 配置
+- `context` 表示工作流允许的上下文长度上限；超限时不会继续请求 LLM，而是直接返回 `context_limit_output_text`
+- `context` 的估算会计入 system prompt、user input、tool prompt、tool schema，以及累计的 tool result；因此不只是用户输入过长会触发超限，工具结果文本过长也会触发
+- `context_limit_output_text` 用于自定义上下文超限时返回给业务侧的提示文案
+- `max_tool_rounds` 用于限制最多可执行多少轮工具调用；超过后直接返回 `tool_round_limit_output_text`
+- `tool_round_limit_output_text` 用于自定义工具调用轮次超限时返回给业务侧的提示文案
+- 若未设置 `max_tool_rounds`，则允许继续执行多轮工具调用，直到 LLM 直接返回最终结果或命中上下文限制
 - 若等级或工具未注册，运行期解析会抛错
 - 当前配置适合本地开发，不建议把真实密钥提交到仓库
 
@@ -199,14 +254,14 @@ from utils import ThreadPoolScheduler
 ## 测试
 
 ```bash
-python -m pytest tests
+python -m unittest discover tests
 ```
 
 例如：
 
 ```bash
-python -m pytest tests/test_agent_pipeline.py
-python -m pytest tests/test_llm_api.py
+python -m unittest tests.test_agent_pipeline
+python -m unittest tests.test_llm_api
 ```
 
 ## 注意事项

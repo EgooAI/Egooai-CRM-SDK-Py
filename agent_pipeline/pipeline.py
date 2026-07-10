@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from typing import Optional, get_type_hints
 
 from agent_pipeline.errors import AgentPresetResolutionError, LLMInvocationError
@@ -25,7 +26,7 @@ class AgentPipeline:
         llm_client: LLMClient,
         manager: Optional[AgentPresetManager] = None,
         tool_executor: Optional[ToolExecutor] = None,
-        max_tool_rounds: int = 5,
+        max_tool_rounds: Optional[int] = None,
     ) -> None:
         self.llm_client = llm_client
         self.manager = manager
@@ -86,6 +87,26 @@ class AgentPipeline:
             )
         return schemas
 
+    @staticmethod
+    def _estimate_request_context_length(request_payload: LLMRequest) -> int:
+        total = len(request_payload.system_prompt) + len(request_payload.user_input) + len(request_payload.tool_prompt)
+        for tool_schema in request_payload.tool_schemas:
+            total += len(tool_schema.name)
+            total += len(tool_schema.description)
+            total += len(json.dumps(tool_schema.parameters, ensure_ascii=False))
+        for tool_result in request_payload.tool_results:
+            total += len(tool_result.name)
+            total += len(json.dumps(tool_result.content, ensure_ascii=False))
+            if tool_result.error:
+                total += len(tool_result.error)
+        return total
+
+    @staticmethod
+    def _compose_system_prompt(runtime: AgentPresetRuntimeConfig) -> str:
+        if runtime.llm.system_prompt:
+            return f"{runtime.llm.system_prompt}\n\n{runtime.preset.prompt}"
+        return runtime.preset.prompt
+
     def _resolve_runtime(self, pipeline_input: AgentPipelineInput) -> AgentPresetRuntimeConfig:
         if pipeline_input.agent_preset is not None:
             try:
@@ -113,7 +134,7 @@ class AgentPipeline:
         tool_results: list[ToolExecutionResult],
     ) -> LLMRequest:
         return LLMRequest(
-            system_prompt=runtime.preset.prompt,
+            system_prompt=self._compose_system_prompt(runtime),
             user_input=pipeline_input.user_input,
             tool_names=runtime.tool_names,
             tool_prompt=self._build_tool_prompt(runtime.tool_names),
@@ -128,9 +149,31 @@ class AgentPipeline:
         raw_responses: list[object] = []
         last_tool_call = None
         iterations = 0
+        context_limit = runtime.llm.context
+        max_tool_rounds = self.max_tool_rounds
+        if max_tool_rounds is None:
+            max_tool_rounds = runtime.llm.max_tool_rounds
 
         while True:
             request_payload = self._build_request(runtime, pipeline_input, tool_results)
+            if context_limit is not None:
+                current_context_length = self._estimate_request_context_length(request_payload)
+                if current_context_length > context_limit:
+                    return AgentPipelineResult(
+                        status="completed",
+                        runtime=runtime,
+                        output_text=(
+                            runtime.llm.context_limit_output_text
+                            or (
+                                f"Context length exceeded limit: {current_context_length}>{context_limit}. "
+                                "Please handle this workflow on the business side."
+                            )
+                        ),
+                        iterations=iterations,
+                        tool_call=last_tool_call,
+                        tool_result=tool_results[-1] if tool_results else None,
+                        raw_responses=raw_responses,
+                    )
             response = self.llm_client.invoke(request_payload)
             iterations += 1
             raw_responses.append(response.raw)
@@ -149,11 +192,11 @@ class AgentPipeline:
             if response.tool_call is None:
                 raise LLMInvocationError("LLMResponse indicates tool usage but no tool_call was provided")
 
-            if len(tool_results) >= self.max_tool_rounds:
+            if max_tool_rounds is not None and len(tool_results) >= max_tool_rounds:
                 return AgentPipelineResult(
                     status="completed",
                     runtime=runtime,
-                    output_text="我不知道",
+                    output_text=runtime.llm.tool_round_limit_output_text or "调用超过次数限制",
                     iterations=iterations,
                     tool_call=last_tool_call,
                     tool_result=tool_results[-1] if tool_results else None,
@@ -175,6 +218,7 @@ def run_agent_preset(
     manager: Optional[AgentPresetManager] = None,
     apid: Optional[str] = None,
     agent_preset=None,
+    max_tool_rounds: Optional[int] = None,
 ) -> AgentPipelineResult:
-    pipeline = AgentPipeline(llm_client=llm_client, manager=manager)
+    pipeline = AgentPipeline(llm_client=llm_client, manager=manager, max_tool_rounds=max_tool_rounds)
     return pipeline.run(AgentPipelineInput(user_input=user_input, apid=apid, agent_preset=agent_preset))

@@ -23,17 +23,27 @@ class LLMApiTestCase(unittest.TestCase):
             path = self._write_yaml(
                 Path(temp_dir),
                 """
-default:
-  base_url: https://api.example.com/v1
-  api_key: replace-me
-  model_name: claude-opus-4-8
-
 levels:
-  0: {}
-  1: {}
-  2: {}
-  3: {}
-  4: {}
+  0:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+  1:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+  3:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+  4:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
 """.strip(),
             )
 
@@ -41,19 +51,24 @@ levels:
 
             self.assertEqual(sorted(levels.keys()), [0, 1, 2, 3, 4])
             self.assertEqual(levels[2].model_name, "claude-opus-4-8")
+            self.assertIsNone(levels[2].system_prompt)
+            self.assertIsNone(levels[2].context)
+            self.assertIsNone(levels[2].context_limit_output_text)
+            self.assertIsNone(levels[2].tool_round_limit_output_text)
 
     def test_load_default_llm_levels_supports_level_overrides(self) -> None:
         with TemporaryDirectory() as temp_dir:
             path = self._write_yaml(
                 Path(temp_dir),
                 """
-default:
-  base_url: https://api.example.com/v1
-  api_key: replace-me
-  model_name: claude-opus-4-8
-
 levels:
+  0:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
   4:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
     model_name: claude-sonnet-5
 """.strip(),
             )
@@ -62,6 +77,97 @@ levels:
 
             self.assertEqual(levels[0].model_name, "claude-opus-4-8")
             self.assertEqual(levels[4].model_name, "claude-sonnet-5")
+
+    def test_load_default_llm_levels_supports_system_prompt_override(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = self._write_yaml(
+                Path(temp_dir),
+                """
+levels:
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+    system_prompt: You are a careful assistant.
+""".strip(),
+            )
+
+            levels = load_default_llm_levels(path)
+
+            self.assertEqual(levels[2].system_prompt, "You are a careful assistant.")
+
+    def test_load_default_llm_levels_supports_context_override(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = self._write_yaml(
+                Path(temp_dir),
+                """
+levels:
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+    context: 4096
+""".strip(),
+            )
+
+            levels = load_default_llm_levels(path)
+
+            self.assertEqual(levels[2].context, 4096)
+
+    def test_load_default_llm_levels_supports_context_limit_output_text_override(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = self._write_yaml(
+                Path(temp_dir),
+                """
+levels:
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+    context_limit_output_text: 上下文超过限制
+""".strip(),
+            )
+
+            levels = load_default_llm_levels(path)
+
+            self.assertEqual(levels[2].context_limit_output_text, "上下文超过限制")
+
+    def test_load_default_llm_levels_supports_tool_round_limit_output_text_override(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = self._write_yaml(
+                Path(temp_dir),
+                """
+levels:
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+    tool_round_limit_output_text: 调用超过次数限制
+""".strip(),
+            )
+
+            levels = load_default_llm_levels(path)
+
+            self.assertEqual(levels[2].tool_round_limit_output_text, "调用超过次数限制")
+
+    def test_load_default_llm_levels_supports_max_tool_rounds_override(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = self._write_yaml(
+                Path(temp_dir),
+                """
+levels:
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
+    max_tool_rounds: 5
+""".strip(),
+            )
+
+            levels = load_default_llm_levels(path)
+
+            self.assertEqual(sorted(levels.keys()), [2])
+            self.assertEqual(levels[2].max_tool_rounds, 5)
 
     def test_register_default_llms_is_idempotent(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -72,6 +178,8 @@ default:
   base_url: https://api.example.com/v1
   api_key: replace-me
   model_name: claude-opus-4-8
+  system_prompt: You are a careful assistant.
+  context: 4096
 """.strip(),
             )
 
@@ -80,6 +188,8 @@ default:
 
             self.assertEqual(llm_registry.list(), second)
             self.assertEqual(first, second)
+            self.assertEqual(first[0].system_prompt, "You are a careful assistant.")
+            self.assertEqual(first[0].context, 4096)
 
     def test_register_default_llms_raises_when_file_missing(self) -> None:
         missing_path = Path("definitely-missing-llm-api.yaml")
@@ -87,14 +197,15 @@ default:
         with self.assertRaises(FileNotFoundError):
             register_default_llms(missing_path)
 
-    def test_load_default_llm_levels_raises_for_missing_default_fields(self) -> None:
+    def test_load_default_llm_levels_raises_for_missing_level_fields_without_default(self) -> None:
         with TemporaryDirectory() as temp_dir:
             path = self._write_yaml(
                 Path(temp_dir),
                 """
-default:
-  base_url: https://api.example.com/v1
-  api_key: replace-me
+levels:
+  0:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
 """.strip(),
             )
 
@@ -108,10 +219,11 @@ default:
             path = self._write_yaml(
                 Path(temp_dir),
                 """
-default:
-  base_url: https://api.example.com/v1
-  api_key: replace-me
-  model_name: claude-opus-4-8
+levels:
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
 """.strip(),
             )
             register_default_llms(path)
@@ -133,10 +245,11 @@ default:
             path = self._write_yaml(
                 Path(temp_dir),
                 """
-default:
-  base_url: https://api.example.com/v1
-  api_key: replace-me
-  model_name: claude-opus-4-8
+levels:
+  2:
+    base_url: https://api.example.com/v1
+    api_key: replace-me
+    model_name: claude-opus-4-8
 """.strip(),
             )
             register_default_llms(path)

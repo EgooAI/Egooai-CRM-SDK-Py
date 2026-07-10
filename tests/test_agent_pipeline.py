@@ -38,6 +38,15 @@ class AgentPipelineTestCase(unittest.TestCase):
             model_name=model_name,
         )
 
+    @staticmethod
+    def _build_llm_config_with_system_prompt(system_prompt: str) -> LLMConfig:
+        return LLMConfig(
+            base_url="https://api.example.com/v1",
+            api_key="secret",
+            model_name="example-model",
+            system_prompt=system_prompt,
+        )
+
     def _build_agent_preset(
         self,
         apid: str = "default-assistant",
@@ -73,6 +82,70 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertEqual(len(client.requests), 1)
         self.assertEqual(client.requests[0].system_prompt, "Help the customer politely")
         self.assertEqual(client.requests[0].tool_names, [])
+
+    def test_run_combines_llm_and_agent_system_prompts(self) -> None:
+        register_llm(2, self._build_llm_config_with_system_prompt("Follow company policy."))
+        preset = self._build_agent_preset(tools=[])
+        client = StaticLLMClient([
+            LLMResponse(text="direct answer", needs_tool=False, raw={"turn": 1}),
+        ])
+
+        AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(
+            client.requests[0].system_prompt,
+            "Follow company policy.\n\nHelp the customer politely",
+        )
+
+    def test_run_returns_business_prompt_when_context_limit_is_exceeded(self) -> None:
+        register_llm(
+            2,
+            LLMConfig(
+                base_url="https://api.example.com/v1",
+                api_key="secret",
+                model_name="example-model",
+                context=10,
+                context_limit_output_text="上下文超过限制",
+            ),
+        )
+        preset = self._build_agent_preset(tools=[])
+        client = StaticLLMClient([
+            LLMResponse(text="should not be called", needs_tool=False, raw={"turn": 1}),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(result.iterations, 0)
+        self.assertEqual(result.output_text, "上下文超过限制")
+        self.assertEqual(len(client.requests), 0)
+
+    def test_run_returns_business_prompt_when_user_input_text_exceeds_context_limit(self) -> None:
+        register_llm(
+            2,
+            LLMConfig(
+                base_url="https://api.example.com/v1",
+                api_key="secret",
+                model_name="example-model",
+                context=120,
+                context_limit_output_text="文本超过限制",
+            ),
+        )
+        preset = self._build_agent_preset(tools=[])
+        client = StaticLLMClient([
+            LLMResponse(text="should not be called", needs_tool=False, raw={"turn": 1}),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="A" * 40, agent_preset=preset)
+        )
+
+        self.assertEqual(result.iterations, 0)
+        self.assertEqual(result.output_text, "文本超过限制")
+        self.assertEqual(len(client.requests), 0)
 
     def test_run_executes_one_tool_round_and_returns_final_output(self) -> None:
         register_llm(2, self._build_llm_config())
@@ -139,7 +212,10 @@ class AgentPipelineTestCase(unittest.TestCase):
         assert result.tool_result is not None
         self.assertEqual(result.tool_result.content, {"keyword": "Bob", "step": 2})
         self.assertEqual(len(client.requests), 3)
-        self.assertEqual([request.tool_result.content if request.tool_result else None for request in client.requests], [None, {"keyword": "Alice", "step": 1}, {"keyword": "Bob", "step": 2}])
+        self.assertEqual(
+            [request.tool_result.content if request.tool_result else None for request in client.requests],
+            [None, {"keyword": "Alice", "step": 1}, {"keyword": "Bob", "step": 2}],
+        )
 
     def test_run_by_apid_uses_manager_resolution_path(self) -> None:
         register_llm(2, self._build_llm_config())
@@ -192,7 +268,16 @@ class AgentPipelineTestCase(unittest.TestCase):
             AgentPipeline(llm_client=client).run(AgentPipelineInput(user_input="hello", agent_preset=preset))
 
     def test_run_returns_unknown_after_more_than_five_tool_rounds(self) -> None:
-        register_llm(2, self._build_llm_config())
+        register_llm(
+            2,
+            LLMConfig(
+                base_url="https://api.example.com/v1",
+                api_key="secret",
+                model_name="example-model",
+                tool_round_limit_output_text="调用超过次数限制",
+                max_tool_rounds=5,
+            ),
+        )
         register_tool("search_customer", lambda keyword: {"keyword": keyword})
         preset = self._build_agent_preset(tools=["search_customer"])
         client = StaticLLMClient([
@@ -232,7 +317,7 @@ class AgentPipelineTestCase(unittest.TestCase):
             AgentPipelineInput(user_input="hello", agent_preset=preset)
         )
 
-        self.assertEqual(result.output_text, "我不知道")
+        self.assertEqual(result.output_text, "调用超过次数限制")
         self.assertEqual(result.iterations, 6)
         self.assertIsNotNone(result.tool_call)
         assert result.tool_call is not None
@@ -240,6 +325,57 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertIsNotNone(result.tool_result)
         assert result.tool_result is not None
         self.assertEqual(result.tool_result.content, {"keyword": "Eve"})
+
+    def test_run_allows_more_than_five_tool_rounds_when_config_has_no_limit(self) -> None:
+        register_llm(2, self._build_llm_config())
+        register_tool("search_customer", lambda keyword: {"keyword": keyword})
+        preset = self._build_agent_preset(tools=["search_customer"])
+        client = StaticLLMClient([
+            LLMResponse(
+                text="need tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Alice"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Bob"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Carol"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Dave"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Eve"}),
+            ),
+            LLMResponse(
+                text="still wants tool",
+                needs_tool=True,
+                tool_call=LLMToolCall(name="search_customer", tool_input={"keyword": "Frank"}),
+            ),
+            LLMResponse(text="final answer", needs_tool=False),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(result.output_text, "final answer")
+        self.assertEqual(result.iterations, 7)
+        self.assertIsNotNone(result.tool_call)
+        assert result.tool_call is not None
+        self.assertEqual(result.tool_call.name, "search_customer")
+        self.assertIsNotNone(result.tool_result)
+        assert result.tool_result is not None
+        self.assertEqual(result.tool_result.content, {"keyword": "Frank"})
 
     def test_run_raises_tool_execution_error_when_callable_fails(self) -> None:
         register_llm(2, self._build_llm_config())
