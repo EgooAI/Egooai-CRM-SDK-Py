@@ -1,6 +1,14 @@
 from .account import AccountManager
 from .account_mapping import AccountMappingManager
 from .agent_preset import AgentPresetManager
+from .agent_preset_resolver import (
+    AgentPresetResolver,
+    AgentPresetRuntimeConfig,
+    agent_preset_resolver,
+    require_agent_preset_by_apid,
+    resolve_agent_preset,
+    resolve_agent_preset_by_apid,
+)
 from .customer import CustomerManager
 from .message import MessageManager
 from .meta import MetaManager
@@ -14,6 +22,12 @@ __all__ = [
     "AccountManager",
     "AccountMappingManager",
     "AgentPresetManager",
+    "AgentPresetResolver",
+    "AgentPresetRuntimeConfig",
+    "agent_preset_resolver",
+    "resolve_agent_preset",
+    "resolve_agent_preset_by_apid",
+    "require_agent_preset_by_apid",
     "PlatformManager",
     "MessageManager",
     "SessionMetaManager",

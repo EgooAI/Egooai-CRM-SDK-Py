@@ -50,9 +50,12 @@ from models import (
 
 ```python
 from core import (
+    AgentPresetRuntimeConfig,
     LLMConfig,
     register_tool,
     register_llm,
+    resolve_agent_preset,
+    require_agent_preset_by_apid,
     tool_registry,
     llm_registry,
 )
@@ -436,6 +439,55 @@ llm_registry.clear() -> None
 ```
 
 `level` 范围为 `0..4`，与 `AgentPreset.intelevel` 保持一致。
+
+### AgentPreset 运行期映射
+
+`AgentPreset` 在数据库里只保存：
+- `intelevel: int`
+- `tools: list[str]`
+
+运行时可以解析为真正可执行的配置：
+
+```python
+from core import LLMConfig, register_llm, register_tool, resolve_agent_preset
+from models import AgentPreset
+
+register_llm(2, LLMConfig(
+    base_url="https://api.example.com/v1",
+    api_key="secret",
+    model_name="example-model",
+))
+
+register_tool("search_customer", lambda keyword: {"keyword": keyword})
+
+preset = AgentPreset(
+    apid="default-assistant",
+    name="default assistant",
+    description="General customer service preset",
+    prompt="Help the customer politely",
+    intelevel=2,
+    tools=["search_customer"],
+)
+
+runtime = resolve_agent_preset(preset)
+llm_config = runtime.llm
+search_tool = runtime.tools[0]
+```
+
+也可以基于数据库中的 `apid` 解析：
+
+```python
+from core import AgentPresetManager, require_agent_preset_by_apid
+
+manager = AgentPresetManager(database_path="demo.sqlite")
+runtime = require_agent_preset_by_apid(manager, "default-assistant")
+```
+
+解析规则：
+- `intelevel` 通过 `llm_registry.require(level)` 映射为 `LLMConfig`
+- `tools` 通过 `tool_registry.require(name)` 映射为 callable 列表
+- 任一等级或工具未注册时，解析会抛 `KeyError`
+- AgentPreset 的 CRUD 不依赖 registry，只有运行期解析才依赖 registry
 
 ## 线程池调度器
 
