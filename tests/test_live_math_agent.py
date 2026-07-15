@@ -7,10 +7,7 @@ from core import AgentPresetManager, llm_registry, tool_registry
 from models import AgentPreset
 
 EXPECTED_MATH_TOOLS = [
-    "add_numbers",
-    "subtract_numbers",
-    "multiply_numbers",
-    "divide_numbers",
+    "calculate",
 ]
 
 
@@ -32,12 +29,12 @@ def run_real_llm_math_agent_live_test() -> None:
     client = OpenAICompatibleLLMClient(llm_registry.require(2))
     result = AgentPipeline(llm_client=client, manager=manager).run(
         AgentPipelineInput(
-            user_input="Use a tool to calculate 7 multiplied by 8 and return JSON only.",
+            user_input="Use the calculate tool to multiply 7 by 8 and return JSON only.",
             apid=preset.apid,
         )
     )
     assert result.tool_call is not None
-    assert result.tool_call.name == "multiply_numbers"
+    assert result.tool_call.name == "calculate"
     assert result.tool_result is not None
     assert result.tool_result.content == 56
     assert "56" in result.output_text

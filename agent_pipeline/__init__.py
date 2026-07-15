@@ -6,7 +6,7 @@ from .errors import (
     ToolSelectionError,
 )
 from .llm import LLMClient, OpenAICompatibleLLMClient, StaticLLMClient
-from .math_tools import add_numbers, divide_numbers, multiply_numbers, register_math_tools, subtract_numbers
+from agent_tools import calculate, register_builtin_tools, register_math_tools
 from .pipeline import AgentPipeline, run_agent_preset
 from .tools import ToolExecutor
 from .types import (
@@ -18,6 +18,8 @@ from .types import (
     ToolExecutionResult,
 )
 
+register_builtin_tools()
+
 __all__ = [
     "AgentPipeline",
     "AgentPipelineInput",
@@ -25,10 +27,8 @@ __all__ = [
     "LLMClient",
     "OpenAICompatibleLLMClient",
     "StaticLLMClient",
-    "add_numbers",
-    "subtract_numbers",
-    "multiply_numbers",
-    "divide_numbers",
+    "calculate",
+    "register_builtin_tools",
     "register_math_tools",
     "LLMRequest",
     "LLMResponse",

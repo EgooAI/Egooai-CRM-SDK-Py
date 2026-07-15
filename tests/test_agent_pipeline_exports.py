@@ -16,8 +16,11 @@ from agent_pipeline import (
     ToolExecutionResult,
     ToolExecutor,
     ToolSelectionError,
+    calculate,
+    register_builtin_tools,
     run_agent_preset,
 )
+from core import tool_registry
 
 
 class AgentPipelineExportsTestCase(unittest.TestCase):
@@ -38,6 +41,11 @@ class AgentPipelineExportsTestCase(unittest.TestCase):
         self.assertTrue(callable(ToolSelectionError))
         self.assertTrue(callable(ToolExecutionError))
         self.assertTrue(hasattr(LLMClient, "invoke"))
+        self.assertTrue(callable(calculate))
+        self.assertTrue(callable(register_builtin_tools))
+
+    def test_import_registers_builtin_tools(self) -> None:
+        self.assertIs(tool_registry.require("calculate"), calculate)
 
 
 if __name__ == "__main__":

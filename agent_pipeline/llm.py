@@ -74,40 +74,65 @@ class OpenAICompatibleLLMClient:
         raise LLMInvocationError("Unsupported tool arguments payload")
 
     def _build_messages(self, request_payload: LLMRequest) -> list[dict[str, Any]]:
+        system_content = (
+            f"{request_payload.system_prompt}\n\n"
+            f"{request_payload.tool_prompt}\n"
+            "When a tool is needed, use the provided function call interface. "
+            "After a tool result answers the user's request, answer directly without calling the same tool again."
+        )
         if not request_payload.tool_results:
             return [
                 {
                     "role": "system",
-                    "content": (
-                        f"{request_payload.system_prompt}\n\n"
-                        f"{request_payload.tool_prompt}\n"
-                        "When a tool is needed, use the provided function call interface. "
-                        "When no tool is needed, answer the user directly."
-                    ),
+                    "content": system_content,
                 },
                 {"role": "user", "content": request_payload.user_input},
             ]
 
-        tool_history = "\n".join(
-            f"{index}. {tool_result.name}: {json.dumps(tool_result.content, ensure_ascii=False)}"
-            for index, tool_result in enumerate(request_payload.tool_results, start=1)
-        )
-        return [
+        messages = [
             {
                 "role": "system",
-                "content": (
-                    f"{request_payload.system_prompt}\n\n"
-                    f"{request_payload.tool_prompt}\n"
-                    "You may call another tool if the available information is still insufficient. "
-                    "If the current information is enough, answer the user directly."
-                ),
+                "content": system_content,
             },
             {"role": "user", "content": request_payload.user_input},
-            {
-                "role": "system",
-                "content": f"Executed tool results:\n{tool_history}",
-            },
         ]
+        for index, tool_result in enumerate(request_payload.tool_results):
+            tool_call = request_payload.tool_calls[index] if index < len(request_payload.tool_calls) else None
+            tool_name = tool_call.name if tool_call is not None else tool_result.name
+            tool_arguments = tool_call.tool_input if tool_call is not None else {}
+            tool_call_id = (
+                tool_call.call_id
+                if tool_call is not None and tool_call.call_id
+                else f"call_{index + 1}_{tool_name}"
+            )
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": tool_call_id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_name,
+                                "arguments": json.dumps(tool_arguments, ensure_ascii=False),
+                            },
+                        }
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "name": tool_result.name,
+                    "content": json.dumps(
+                        tool_result.content if tool_result.ok else {"error": tool_result.error},
+                        ensure_ascii=False,
+                    ),
+                }
+            )
+        return messages
 
     def _build_payload(self, request_payload: LLMRequest) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -183,10 +208,15 @@ class OpenAICompatibleLLMClient:
             if not isinstance(tool_name, str) or not tool_name:
                 raise LLMInvocationError("LLM API tool call missing tool name")
             tool_arguments = self._load_tool_arguments(function_payload.get("arguments"))
+            call_id = first_tool_call.get("id")
             return LLMResponse(
                 text=self._stringify_content(message.get("content")),
                 needs_tool=True,
-                tool_call=LLMToolCall(name=tool_name, tool_input=tool_arguments),
+                tool_call=LLMToolCall(
+                    name=tool_name,
+                    tool_input=tool_arguments,
+                    call_id=call_id if isinstance(call_id, str) and call_id else None,
+                ),
                 raw=raw_response,
             )
 

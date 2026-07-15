@@ -5,6 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from threading import RLock
 from types import MethodType
@@ -79,11 +80,12 @@ def utc_now() -> datetime:
 
 
 def resolve_database_path(database_path: Optional[Path | str] = None) -> Path:
-    """解析 sqlite 数据库文件路径；未传入时默认使用项目根目录下的 db.sqlite。"""
+    """解析 sqlite 数据库文件路径；未传入时默认使用 data/crm.sqlite。"""
     if database_path is not None:
         resolved_path = Path(database_path).resolve()
     else:
-        resolved_path = (Path(__file__).resolve().parent.parent / "db.sqlite").resolve()
+        default_path = os.environ.get("MAA_CRM_DB_PATH", "data/crm.sqlite")
+        resolved_path = Path(default_path).resolve()
 
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     return resolved_path

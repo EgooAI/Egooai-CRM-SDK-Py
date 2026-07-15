@@ -11,6 +11,7 @@ from agent_pipeline.types import (
     AgentPipelineInput,
     AgentPipelineResult,
     LLMRequest,
+    LLMToolCall,
     LLMToolSchema,
     ToolExecutionResult,
 )
@@ -131,6 +132,7 @@ class AgentPipeline:
         self,
         runtime: AgentPresetRuntimeConfig,
         pipeline_input: AgentPipelineInput,
+        tool_calls: list[LLMToolCall],
         tool_results: list[ToolExecutionResult],
     ) -> LLMRequest:
         return LLMRequest(
@@ -141,10 +143,12 @@ class AgentPipeline:
             tool_schemas=self._build_tool_schemas(runtime),
             tool_result=tool_results[-1] if tool_results else None,
             tool_results=list(tool_results),
+            tool_calls=list(tool_calls),
         )
 
     def run(self, pipeline_input: AgentPipelineInput) -> AgentPipelineResult:
         runtime = self._resolve_runtime(pipeline_input)
+        tool_calls: list[LLMToolCall] = []
         tool_results: list[ToolExecutionResult] = []
         raw_responses: list[object] = []
         last_tool_call = None
@@ -155,7 +159,7 @@ class AgentPipeline:
             max_tool_rounds = runtime.llm.max_tool_rounds
 
         while True:
-            request_payload = self._build_request(runtime, pipeline_input, tool_results)
+            request_payload = self._build_request(runtime, pipeline_input, tool_calls, tool_results)
             if context_limit is not None:
                 current_context_length = self._estimate_request_context_length(request_payload)
                 if current_context_length > context_limit:
@@ -209,6 +213,7 @@ class AgentPipeline:
                 response.tool_call.name,
                 response.tool_call.tool_input,
             )
+            tool_calls.append(response.tool_call)
             tool_results.append(tool_result)
 
 

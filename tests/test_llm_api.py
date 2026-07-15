@@ -2,8 +2,18 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from agent_pipeline import AgentPipeline, AgentPipelineInput, LLMResponse, StaticLLMClient
-from core import AgentPresetManager, llm_registry, tool_registry
+from agent_pipeline import (
+    AgentPipeline,
+    AgentPipelineInput,
+    LLMRequest,
+    LLMResponse,
+    LLMToolCall,
+    OpenAICompatibleLLMClient,
+    StaticLLMClient,
+    ToolExecutionResult,
+)
+from agent_pipeline.types import LLMToolSchema
+from core import AgentPresetManager, LLMConfig, llm_registry, tool_registry
 from agent_pipeline.llm_api import load_default_llm_levels, register_default_llms
 from models import AgentPreset
 
@@ -277,6 +287,52 @@ levels:
                 self.assertEqual(result.runtime.llm.model_name, "claude-opus-4-8")
             finally:
                 manager.engine.dispose()
+
+    def test_openai_client_replays_tool_history_with_tool_messages(self) -> None:
+        client = OpenAICompatibleLLMClient(
+            LLMConfig(
+                base_url="https://api.example.com/v1",
+                api_key="replace-me",
+                model_name="example-model",
+            )
+        )
+        payload = client._build_payload(
+            LLMRequest(
+                system_prompt="You are helpful.",
+                user_input="What is 7*8?",
+                tool_names=["calculate"],
+                tool_prompt="Available tools:\n- calculate",
+                tool_schemas=[
+                    LLMToolSchema(
+                        name="calculate",
+                        description="Perform arithmetic.",
+                        parameters={"type": "object"},
+                    )
+                ],
+                tool_calls=[
+                    LLMToolCall(
+                        name="calculate",
+                        tool_input={"operation": "multiply", "a": 7, "b": 8},
+                        call_id="call_abc",
+                    )
+                ],
+                tool_results=[
+                    ToolExecutionResult(
+                        name="calculate",
+                        ok=True,
+                        content=56,
+                    )
+                ],
+            )
+        )
+
+        messages = payload["messages"]
+        self.assertEqual([message["role"] for message in messages], ["system", "user", "assistant", "tool"])
+        self.assertEqual(messages[2]["tool_calls"][0]["id"], "call_abc")
+        self.assertEqual(messages[2]["tool_calls"][0]["function"]["name"], "calculate")
+        self.assertEqual(messages[3]["tool_call_id"], "call_abc")
+        self.assertEqual(messages[3]["content"], "56")
+        self.assertNotIn("Executed tool results", messages[0]["content"])
 
 
 if __name__ == "__main__":
