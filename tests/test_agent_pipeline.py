@@ -14,6 +14,7 @@ from agent_pipeline import (
     run_agent_preset,
 )
 from core import AgentPresetManager, LLMConfig, llm_registry, register_llm, register_tool, tool_registry
+from core.system_agents import CHAT_REPLY_SUGGESTION_AGENT_APID
 from models import AgentPreset
 
 
@@ -177,6 +178,31 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertIsNotNone(client.requests[1].tool_result)
         assert client.requests[1].tool_result is not None
         self.assertEqual(client.requests[1].tool_result.content, {"keyword": "Alice", "match": "Alice"})
+
+    def test_system_agent_normalizes_direct_json_output(self) -> None:
+        register_llm(2, self._build_llm_config())
+        preset = self._build_agent_preset(
+            apid=CHAT_REPLY_SUGGESTION_AGENT_APID,
+            tools=[],
+        )
+        client = StaticLLMClient([
+            LLMResponse(
+                text='{"language":"English","suggestions":[{"cn":"您好","text":"Hello"}]}',
+                needs_tool=False,
+                raw={"turn": 1},
+            ),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="conversation", agent_preset=preset)
+        )
+
+        self.assertEqual(result.iterations, 1)
+        self.assertEqual(
+            result.output_text,
+            '{"buyer_language": "English", "items": [{"zh": "您好", "reply": "Hello"}]}',
+        )
+        self.assertEqual(client.requests[0].tool_names, [])
 
     def test_run_can_execute_multiple_tool_rounds(self) -> None:
         register_llm(2, self._build_llm_config())

@@ -5,10 +5,6 @@ from tempfile import TemporaryDirectory
 from core import (
     AgentPresetManager,
     AgentPresetResolver,
-    CHAT_CUSTOMER_INTENT_AGENT_APID,
-    CHAT_CUSTOMER_INTENT_RESULT_TOOL,
-    CHAT_REPLY_SUGGESTION_AGENT_APID,
-    CHAT_REPLY_SUGGESTION_RESULT_TOOL,
     LLMConfig,
     llm_registry,
     register_llm,
@@ -103,42 +99,6 @@ class AgentPresetResolverTestCase(unittest.TestCase):
 
         self.assertEqual(runtime.tools, [])
         self.assertEqual(runtime.tool_names, [])
-
-    def test_system_agent_uses_hardcoded_tools_instead_of_database_tools(self) -> None:
-        register_llm(2, self._build_llm_config())
-        register_tool(CHAT_REPLY_SUGGESTION_RESULT_TOOL, self._search_tool)
-        agent_preset = self._build_agent_preset(
-            apid=CHAT_REPLY_SUGGESTION_AGENT_APID,
-            tools=["missing_database_tool"],
-        )
-
-        runtime = resolve_agent_preset(agent_preset)
-
-        self.assertEqual(runtime.tool_names, [CHAT_REPLY_SUGGESTION_RESULT_TOOL])
-        self.assertIs(runtime.tools[0], self._search_tool)
-
-    def test_normal_agent_cannot_use_system_chat_tools(self) -> None:
-        register_llm(2, self._build_llm_config())
-        register_tool(CHAT_CUSTOMER_INTENT_RESULT_TOOL, self._search_tool)
-        agent_preset = self._build_agent_preset(
-            apid="normal-agent",
-            tools=[CHAT_CUSTOMER_INTENT_RESULT_TOOL],
-        )
-
-        with self.assertRaises(ValueError):
-            resolve_agent_preset(agent_preset)
-
-    def test_intent_system_agent_uses_hardcoded_intent_tool(self) -> None:
-        register_llm(2, self._build_llm_config())
-        register_tool(CHAT_CUSTOMER_INTENT_RESULT_TOOL, self._search_tool)
-        agent_preset = self._build_agent_preset(
-            apid=CHAT_CUSTOMER_INTENT_AGENT_APID,
-            tools=[],
-        )
-
-        runtime = resolve_agent_preset(agent_preset)
-
-        self.assertEqual(runtime.tool_names, [CHAT_CUSTOMER_INTENT_RESULT_TOOL])
 
     def test_resolve_agent_preset_by_apid_returns_none_when_missing(self) -> None:
         register_llm(2, self._build_llm_config())

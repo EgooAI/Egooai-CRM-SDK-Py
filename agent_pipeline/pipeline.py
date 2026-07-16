@@ -17,6 +17,8 @@ from agent_pipeline.types import (
 )
 from core.agent_preset import AgentPresetManager
 from core.agent_preset_resolver import AgentPresetRuntimeConfig, require_agent_preset_by_apid, resolve_agent_preset
+from core.system_agents import SYSTEM_AGENT_APIDS
+from utils.chat_result_normalizer import normalize_system_agent_output
 
 
 class AgentPipeline:
@@ -183,10 +185,13 @@ class AgentPipeline:
             raw_responses.append(response.raw)
 
             if not response.needs_tool:
+                output_text = response.text
+                if runtime.preset.apid in SYSTEM_AGENT_APIDS:
+                    output_text = normalize_system_agent_output(runtime.preset.apid, response.text)
                 return AgentPipelineResult(
                     status="completed",
                     runtime=runtime,
-                    output_text=response.text,
+                    output_text=output_text,
                     iterations=iterations,
                     tool_call=last_tool_call,
                     tool_result=tool_results[-1] if tool_results else None,
