@@ -1,3 +1,4 @@
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -24,11 +25,16 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.temp_path = Path(self.temp_dir.name)
         self.db_path = self.temp_path / "agent_pipeline.sqlite"
         self.manager = AgentPresetManager(database_path=self.db_path)
+        self.original_system_prompt = os.environ.get("SYSTEM_PROMPT")
 
     def tearDown(self) -> None:
         self.manager.engine.dispose()
         tool_registry.clear()
         llm_registry.clear()
+        if self.original_system_prompt is None:
+            os.environ.pop("SYSTEM_PROMPT", None)
+        else:
+            os.environ["SYSTEM_PROMPT"] = self.original_system_prompt
         self.temp_dir.cleanup()
 
     @staticmethod
@@ -98,6 +104,23 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertEqual(
             client.requests[0].system_prompt,
             "Follow company policy.\n\nHelp the customer politely",
+        )
+
+    def test_run_prepends_global_system_prompt_from_env(self) -> None:
+        os.environ["SYSTEM_PROMPT"] = "Global compliance rules."
+        register_llm(2, self._build_llm_config_with_system_prompt("Follow company policy."))
+        preset = self._build_agent_preset(tools=[])
+        client = StaticLLMClient([
+            LLMResponse(text="direct answer", needs_tool=False, raw={"turn": 1}),
+        ])
+
+        AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(
+            client.requests[0].system_prompt,
+            "Global compliance rules.\n\nFollow company policy.\n\nHelp the customer politely",
         )
 
     def test_run_returns_business_prompt_when_context_limit_is_exceeded(self) -> None:

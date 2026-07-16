@@ -19,6 +19,7 @@ from core.agent_preset import AgentPresetManager
 from core.agent_preset_resolver import AgentPresetRuntimeConfig, require_agent_preset_by_apid, resolve_agent_preset
 from core.system_agents import SYSTEM_AGENT_APIDS
 from utils.chat_result_normalizer import normalize_system_agent_output
+from app.shared.utils.env import get_env_text
 
 
 class AgentPipeline:
@@ -106,9 +107,16 @@ class AgentPipeline:
 
     @staticmethod
     def _compose_system_prompt(runtime: AgentPresetRuntimeConfig) -> str:
-        if runtime.llm.system_prompt:
-            return f"{runtime.llm.system_prompt}\n\n{runtime.preset.prompt}"
-        return runtime.preset.prompt
+        prompt_parts = [
+            part
+            for part in (
+                get_env_text("SYSTEM_PROMPT"),
+                runtime.llm.system_prompt,
+                runtime.preset.prompt,
+            )
+            if part
+        ]
+        return "\n\n".join(prompt_parts)
 
     def _resolve_runtime(self, pipeline_input: AgentPipelineInput) -> AgentPresetRuntimeConfig:
         if pipeline_input.agent_preset is not None:
