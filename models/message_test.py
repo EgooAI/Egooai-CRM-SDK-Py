@@ -5,7 +5,7 @@ from sqlmodel import Field, SQLModel
 
 
 class MessageTest(SQLModel, table=True):
-    __tablename__ = "Message_test"
+    __tablename__ = "message_test"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
