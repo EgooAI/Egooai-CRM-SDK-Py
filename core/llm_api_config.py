@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any
 from typing import Optional
 
-from sqlalchemy import inspect
 from sqlmodel import Session, select
 
 from models.llm_api_config import LLMApiConfig
@@ -13,19 +12,6 @@ class LLMApiConfigManager:
     def __init__(self, database_path: Optional[Path | str] = None) -> None:
         self.database_path, self.engine = bootstrap_engine(database_path)
         self._lock = get_database_lock(self.database_path)
-        self._migrate_legacy_table_if_needed()
-
-    def _migrate_legacy_table_if_needed(self) -> None:
-        inspector = inspect(self.engine)
-        if "llm_api_config" not in inspector.get_table_names():
-            return
-        columns = {column["name"] for column in inspector.get_columns("llm_api_config")}
-        if "level" in columns:
-            return
-        with self._lock:
-            with self.engine.begin() as connection:
-                connection.exec_driver_sql("DROP TABLE IF EXISTS llm_api_config")
-            LLMApiConfig.metadata.create_all(self.engine)
 
     def get_config(self, level: int) -> Optional[LLMApiConfig]:
         with self._lock:

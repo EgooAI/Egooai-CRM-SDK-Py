@@ -158,8 +158,7 @@ print(result.iterations)
 
 ## LLM 配置
 
-默认配置来源是 CRM SQLite 数据库中的 `llm_api_config` 表。该表一行对应一个 LLM level，
-字段与原 YAML 配置项一一对应：
+默认配置来源是 CRM SQLite 数据库中的 `llm_api_config` 表。该表一行对应一个 LLM level：
 
 ```text
 llm_api_config
@@ -203,15 +202,7 @@ from agent_pipeline.llm_api import register_default_llms
 register_default_llms()
 ```
 
-默认调用不再读取 `llm_api.yaml` 文件；如果 `llm_api_config` 表没有数据，会抛出配置不存在错误。
-
-测试或外部工具仍可以显式指定一个 YAML 配置文件路径：
-
-```python
-from agent_pipeline.llm_api import register_default_llms
-
-register_default_llms("./config/llm_api.yaml")
-```
+如果 `llm_api_config` 表没有数据，会抛出配置不存在错误。
 
 说明：
 
