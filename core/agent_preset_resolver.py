@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from core.agent_preset import AgentPresetManager
 from core.registry import LLMConfig, llm_registry, tool_registry
+from core.system_agent_tools import SYSTEM_AGENT_ONLY_TOOLS, SYSTEM_AGENT_TOOLS
 from models.agent_preset import AgentPreset
 
 
@@ -31,7 +32,16 @@ class AgentPresetResolver:
     @staticmethod
     def resolve(agent_preset: AgentPreset) -> AgentPresetRuntimeConfig:
         llm_config = llm_registry.require(agent_preset.intelevel)
-        tool_names = list(agent_preset.tools)
+        if agent_preset.apid in SYSTEM_AGENT_TOOLS:
+            tool_names = list(SYSTEM_AGENT_TOOLS[agent_preset.apid])
+        else:
+            tool_names = list(agent_preset.tools)
+            forbidden_tools = sorted(SYSTEM_AGENT_ONLY_TOOLS.intersection(tool_names))
+            if forbidden_tools:
+                raise ValueError(
+                    "普通 Agent 不能调用系统 Chat 工具: "
+                    + ", ".join(forbidden_tools)
+                )
         tools = [tool_registry.require(tool_name) for tool_name in tool_names]
         return AgentPresetRuntimeConfig(
             preset=agent_preset,
