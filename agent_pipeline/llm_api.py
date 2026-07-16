@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 
 from core import LLMConfig, register_llm
+from core.llm_api_config import LLMApiConfigManager
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "llm_api.yaml"
 DEFAULT_EXAMPLE_CONFIG_PATH = Path(__file__).resolve().parent.parent / "llm_api.example.yaml"
@@ -33,7 +34,12 @@ def _validate_optional_positive_int(value: Any, field_name: str) -> int | None:
     return value
 
 
-def load_default_llm_levels(config_path: Path | str | None = None) -> dict[int, LLMConfig]:
+def _load_payload(config_path: Path | str | None = None) -> dict[str, Any]:
+    if config_path is None:
+        payload = LLMApiConfigManager().to_payload()
+        if payload is not None:
+            return payload
+
     resolved_path = Path(config_path or DEFAULT_CONFIG_PATH).resolve()
     if not resolved_path.exists():
         raise FileNotFoundError(f"LLM config file not found: {resolved_path}")
@@ -43,6 +49,11 @@ def load_default_llm_levels(config_path: Path | str | None = None) -> dict[int, 
 
     if not isinstance(payload, dict):
         raise ValueError("llm_api.yaml must contain a mapping at the top level")
+    return payload
+
+
+def load_default_llm_levels(config_path: Path | str | None = None) -> dict[int, LLMConfig]:
+    payload = _load_payload(config_path)
 
     default = payload.get("default", {})
     if default is None:

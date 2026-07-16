@@ -10,6 +10,7 @@ from .agent_preset_resolver import (
     resolve_agent_preset_by_apid,
 )
 from .customer import CustomerManager
+from .llm_api_config import LLMApiConfigManager
 from .message import MessageManager
 from .message_test import MessageTestManager
 from .meta import MetaManager
@@ -20,6 +21,7 @@ from .translate import TranslateManager
 
 __all__ = [
     "CustomerManager",
+    "LLMApiConfigManager",
     "AccountManager",
     "AccountMappingManager",
     "AgentPresetManager",
