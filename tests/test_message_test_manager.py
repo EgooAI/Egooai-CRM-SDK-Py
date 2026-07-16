@@ -43,7 +43,7 @@ class MessageTestManagerTestCase(unittest.TestCase):
         finally:
             connection.close()
 
-        self.assertIn("Message_test", tables)
+        self.assertIn("message_test", tables)
 
     def test_add_message_test_persists_generated_id(self) -> None:
         message_test = self._build_message_test()
