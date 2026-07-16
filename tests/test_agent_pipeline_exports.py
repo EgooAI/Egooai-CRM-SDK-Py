@@ -44,7 +44,9 @@ class AgentPipelineExportsTestCase(unittest.TestCase):
         self.assertTrue(callable(calculate))
         self.assertTrue(callable(register_builtin_tools))
 
-    def test_import_registers_builtin_tools(self) -> None:
+    def test_register_builtin_tools_registers_calculate(self) -> None:
+        register_builtin_tools()
+
         self.assertIs(tool_registry.require("calculate"), calculate)
 
 

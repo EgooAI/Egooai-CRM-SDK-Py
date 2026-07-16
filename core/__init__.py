@@ -11,6 +11,7 @@ from .agent_preset_resolver import (
 )
 from .customer import CustomerManager
 from .message import MessageManager
+from .message_test import MessageTestManager
 from .meta import MetaManager
 from .platform import PlatformManager
 from .registry import LLMConfig, LLMRegistry, ToolRegistry, llm_registry, register_llm, register_tool, tool_registry
@@ -30,6 +31,7 @@ __all__ = [
     "require_agent_preset_by_apid",
     "PlatformManager",
     "MessageManager",
+    "MessageTestManager",
     "SessionMetaManager",
     "TranslateManager",
     "MetaManager",

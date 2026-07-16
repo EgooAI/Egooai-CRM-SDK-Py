@@ -3,6 +3,7 @@ from .account_mapping import AccountMapping
 from .agent_preset import AgentPreset
 from .customer import Customer
 from .message import Message
+from .message_test import MessageTest
 from .meta import Meta
 from .platform import Platform
 from .session_meta import SessionMeta
@@ -14,6 +15,7 @@ __all__ = [
     "AgentPreset",
     "Customer",
     "Message",
+    "MessageTest",
     "Meta",
     "Platform",
     "SessionMeta",
