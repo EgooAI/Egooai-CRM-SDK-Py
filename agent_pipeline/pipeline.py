@@ -143,7 +143,6 @@ class AgentPipeline:
             tool_names=runtime.tool_names,
             tool_prompt=self._build_tool_prompt(runtime.tool_names),
             tool_schemas=self._build_tool_schemas(runtime),
-            tool_result=tool_results[-1] if tool_results else None,
             tool_results=list(tool_results),
             tool_calls=list(tool_calls),
         )

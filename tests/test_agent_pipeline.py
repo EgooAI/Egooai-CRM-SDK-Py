@@ -175,9 +175,8 @@ class AgentPipelineTestCase(unittest.TestCase):
         assert result.tool_result is not None
         self.assertEqual(result.tool_result.content, {"keyword": "Alice", "match": "Alice"})
         self.assertEqual(len(client.requests), 2)
-        self.assertIsNotNone(client.requests[1].tool_result)
-        assert client.requests[1].tool_result is not None
-        self.assertEqual(client.requests[1].tool_result.content, {"keyword": "Alice", "match": "Alice"})
+        self.assertEqual(len(client.requests[1].tool_results), 1)
+        self.assertEqual(client.requests[1].tool_results[0].content, {"keyword": "Alice", "match": "Alice"})
 
     def test_system_agent_normalizes_direct_json_output(self) -> None:
         register_llm(2, self._build_llm_config())
@@ -187,7 +186,7 @@ class AgentPipelineTestCase(unittest.TestCase):
         )
         client = StaticLLMClient([
             LLMResponse(
-                text='{"language":"English","suggestions":[{"cn":"您好","text":"Hello"}]}',
+                text='{"buyer_language":"English","items":[{"zh":"您好","reply":"Hello"}]}',
                 needs_tool=False,
                 raw={"turn": 1},
             ),
@@ -239,7 +238,10 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertEqual(result.tool_result.content, {"keyword": "Bob", "step": 2})
         self.assertEqual(len(client.requests), 3)
         self.assertEqual(
-            [request.tool_result.content if request.tool_result else None for request in client.requests],
+            [
+                request.tool_results[-1].content if request.tool_results else None
+                for request in client.requests
+            ],
             [None, {"keyword": "Alice", "step": 1}, {"keyword": "Bob", "step": 2}],
         )
 

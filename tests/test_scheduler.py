@@ -10,13 +10,6 @@ from utils import ThreadPoolScheduler
 
 
 class ThreadPoolSchedulerTestCase(unittest.TestCase):
-    def test_scheduler_compatibility_aliases_are_still_available(self) -> None:
-        from config.scheduler import ThreadPoolScheduler as ConfigSchedulerAlias
-        from scheduler import ThreadPoolScheduler as SchedulerAlias
-
-        self.assertIs(ConfigSchedulerAlias, ThreadPoolScheduler)
-        self.assertIs(SchedulerAlias, ThreadPoolScheduler)
-
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)

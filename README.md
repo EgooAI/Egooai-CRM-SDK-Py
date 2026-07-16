@@ -125,7 +125,7 @@ manager.upsert_agent_preset(
         description="Use math tools when needed",
         prompt="You are a precise math assistant.",
         intelevel=2,
-        tools=["add_numbers", "subtract_numbers", "multiply_numbers", "divide_numbers"],
+        tools=["calculate"],
     )
 )
 
