@@ -114,7 +114,7 @@ from agent_pipeline.llm_api import register_default_llms
 from core import AgentPresetManager, llm_registry
 from models import AgentPreset
 
-register_default_llms()  # 默认读取项目根目录 llm_api.yaml
+register_default_llms()  # 默认读取 data/crm.sqlite 的 llm_api_config 表
 register_math_tools()
 
 manager = AgentPresetManager(database_path="demo.sqlite")
@@ -158,58 +158,44 @@ print(result.iterations)
 
 ## LLM 配置
 
-项目内提供示例文件：
+默认配置来源是 CRM SQLite 数据库中的 `llm_api_config` 表。该表一行对应一个 LLM level，
+字段与原 YAML 配置项一一对应：
 
-- `llm_api.example.yaml`
-
-先复制为 `llm_api.yaml`，再填写真实配置：
-
-```yaml
-levels:
-  0:
-    base_url: "https://api.example.com/v1"
-    api_key: "replace-me"
-    model_name: "claude-opus-4-8"
-    system_prompt: "You are a careful and policy-compliant assistant."
-    context: 12000
-    context_limit_output_text: "上下文超过限制"
-    tool_round_limit_output_text: "调用超过次数限制"
-  1:
-    base_url: "https://api.example.com/v1"
-    api_key: "replace-me"
-    model_name: "claude-opus-4-8"
-    system_prompt: "You are a careful and policy-compliant assistant."
-    context: 12000
-    context_limit_output_text: "上下文超过限制"
-    tool_round_limit_output_text: "调用超过次数限制"
-  2:
-    base_url: "https://api.example.com/v1"
-    api_key: "replace-me"
-    model_name: "claude-opus-4-8"
-    system_prompt: "You are a careful and policy-compliant assistant."
-    context: 12000
-    context_limit_output_text: "上下文超过限制"
-    tool_round_limit_output_text: "调用超过次数限制"
-    max_tool_rounds: 5
-  3:
-    base_url: "https://api.example.com/v1"
-    api_key: "replace-me"
-    model_name: "claude-opus-4-8"
-    system_prompt: "You are a careful and policy-compliant assistant."
-    context: 12000
-    context_limit_output_text: "上下文超过限制"
-    tool_round_limit_output_text: "调用超过次数限制"
-  4:
-    base_url: "https://api.example.com/v1"
-    api_key: "replace-me"
-    model_name: "claude-opus-4-8"
-    system_prompt: "You are a careful and policy-compliant assistant."
-    context: 12000
-    context_limit_output_text: "上下文超过限制"
-    tool_round_limit_output_text: "调用超过次数限制"
+```text
+llm_api_config
+├── level                         # 主键，0~4
+├── base_url
+├── api_key
+├── model_name
+├── system_prompt
+├── context
+├── context_limit_output_text
+├── tool_round_limit_output_text
+└── max_tool_rounds
 ```
 
-加载方式：
+推荐通过 Web 端 `/agent` 页面的 “LLM 配置” 面板维护该表。也可以通过 Manager 写入：
+
+```python
+from core import LLMApiConfigManager
+from models import LLMApiConfig
+
+LLMApiConfigManager().replace_configs([
+    LLMApiConfig(
+        level=0,
+        base_url="https://api.example.com/v1",
+        api_key="replace-me",
+        model_name="claude-opus-4-8",
+        system_prompt="You are a careful and policy-compliant assistant.",
+        context=12000,
+        context_limit_output_text="上下文超过限制",
+        tool_round_limit_output_text="调用超过次数限制",
+        max_tool_rounds=5,
+    ),
+])
+```
+
+默认加载方式：
 
 ```python
 from agent_pipeline.llm_api import register_default_llms
@@ -217,7 +203,9 @@ from agent_pipeline.llm_api import register_default_llms
 register_default_llms()
 ```
 
-也可以显式指定配置文件路径：
+默认调用不再读取 `llm_api.yaml` 文件；如果 `llm_api_config` 表没有数据，会抛出配置不存在错误。
+
+测试或外部工具仍可以显式指定一个 YAML 配置文件路径：
 
 ```python
 from agent_pipeline.llm_api import register_default_llms
