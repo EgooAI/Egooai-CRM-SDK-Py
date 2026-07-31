@@ -1,3 +1,4 @@
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -17,11 +18,23 @@ from agent_pipeline.types import LLMToolSchema
 from core import AgentPresetManager, LLMApiConfigManager, LLMConfig, llm_registry, tool_registry
 from models import AgentPreset, LLMApiConfig
 
+_OUTPUT_TEXT_ENV_KEYS = ("LLM_CONTEXT_LIMIT_OUTPUT_TEXT", "LLM_TOOL_ROUND_LIMIT_OUTPUT_TEXT")
+
 
 class LLMApiTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_output_text_env = {key: os.environ.get(key) for key in _OUTPUT_TEXT_ENV_KEYS}
+        for key in _OUTPUT_TEXT_ENV_KEYS:
+            os.environ.pop(key, None)
+
     def tearDown(self) -> None:
         llm_registry.clear()
         tool_registry.clear()
+        for key, value in self.original_output_text_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     @staticmethod
     def _config(level: int, model_name: str = "claude-opus-4-8", **overrides) -> LLMApiConfig:
@@ -75,6 +88,8 @@ class LLMApiTestCase(unittest.TestCase):
     def test_load_default_llm_levels_maps_optional_fields(self) -> None:
         with TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "llm_api.sqlite"
+            os.environ["LLM_CONTEXT_LIMIT_OUTPUT_TEXT"] = "文本超过限制"
+            os.environ["LLM_TOOL_ROUND_LIMIT_OUTPUT_TEXT"] = "工具超过限制"
             self._write_configs(
                 db_path,
                 [
@@ -82,8 +97,6 @@ class LLMApiTestCase(unittest.TestCase):
                         2,
                         system_prompt="You are a careful assistant.",
                         context=4096,
-                        context_limit_output_text="文本超过限制",
-                        tool_round_limit_output_text="工具超过限制",
                         max_tool_rounds=5,
                     )
                 ],

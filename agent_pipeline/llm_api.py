@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from core import LLMConfig, register_llm
 from core.llm_api_config import LLMApiConfigManager
 
+_CONTEXT_LIMIT_OUTPUT_ENV = "LLM_CONTEXT_LIMIT_OUTPUT_TEXT"
+_TOOL_ROUND_LIMIT_OUTPUT_ENV = "LLM_TOOL_ROUND_LIMIT_OUTPUT_TEXT"
+_DEFAULT_CONTEXT_LIMIT_OUTPUT_TEXT = "上下文超过限制"
+_DEFAULT_TOOL_ROUND_LIMIT_OUTPUT_TEXT = "调用超过次数限制"
+
 
 def _none_if_empty(value: str | None) -> str | None:
     return value or None
+
+
+def _env_text(key: str, default: str) -> str:
+    return os.getenv(key) or default
 
 
 def load_default_llm_levels(database_path: Path | str | None = None) -> dict[int, LLMConfig]:
@@ -27,8 +37,11 @@ def load_default_llm_levels(database_path: Path | str | None = None) -> dict[int
             model_name=config.model_name,
             system_prompt=_none_if_empty(config.system_prompt),
             context=config.context,
-            context_limit_output_text=_none_if_empty(config.context_limit_output_text),
-            tool_round_limit_output_text=_none_if_empty(config.tool_round_limit_output_text),
+            context_limit_output_text=_env_text(_CONTEXT_LIMIT_OUTPUT_ENV, _DEFAULT_CONTEXT_LIMIT_OUTPUT_TEXT),
+            tool_round_limit_output_text=_env_text(
+                _TOOL_ROUND_LIMIT_OUTPUT_ENV,
+                _DEFAULT_TOOL_ROUND_LIMIT_OUTPUT_TEXT,
+            ),
             max_tool_rounds=config.max_tool_rounds,
         )
         for config in configs

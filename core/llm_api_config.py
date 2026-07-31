@@ -12,6 +12,7 @@ class LLMApiConfigManager:
     def __init__(self, database_path: Optional[Path | str] = None) -> None:
         self.database_path, self.engine = bootstrap_engine(database_path)
         self._lock = get_database_lock(self.database_path)
+        self._drop_legacy_output_text_columns()
 
     def get_config(self, level: int) -> Optional[LLMApiConfig]:
         with self._lock:
@@ -36,8 +37,6 @@ class LLMApiConfigManager:
                     "model_name": config.model_name,
                     "system_prompt": config.system_prompt,
                     "context": config.context,
-                    "context_limit_output_text": config.context_limit_output_text,
-                    "tool_round_limit_output_text": config.tool_round_limit_output_text,
                     "max_tool_rounds": config.max_tool_rounds,
                 }
                 for config in configs
@@ -59,8 +58,6 @@ class LLMApiConfigManager:
                 current.model_name = config.model_name
                 current.system_prompt = config.system_prompt
                 current.context = config.context
-                current.context_limit_output_text = config.context_limit_output_text
-                current.tool_round_limit_output_text = config.tool_round_limit_output_text
                 current.max_tool_rounds = config.max_tool_rounds
                 session.add(current)
                 session.commit()
@@ -84,9 +81,56 @@ class LLMApiConfigManager:
         target.model_name = source.model_name
         target.system_prompt = source.system_prompt
         target.context = source.context
-        target.context_limit_output_text = source.context_limit_output_text
-        target.tool_round_limit_output_text = source.tool_round_limit_output_text
         target.max_tool_rounds = source.max_tool_rounds
+
+    def _drop_legacy_output_text_columns(self) -> None:
+        legacy_columns = {"context_limit_output_text", "tool_round_limit_output_text"}
+        with self._lock:
+            with self.engine.begin() as connection:
+                rows = connection.exec_driver_sql("PRAGMA table_info(llm_api_config)").mappings().all()
+                columns = {str(row["name"]) for row in rows}
+                if not legacy_columns.intersection(columns):
+                    return
+
+                connection.exec_driver_sql("DROP TABLE IF EXISTS llm_api_config_new")
+                connection.exec_driver_sql(
+                    """
+                    CREATE TABLE llm_api_config_new (
+                        level INTEGER NOT NULL,
+                        base_url VARCHAR NOT NULL,
+                        api_key VARCHAR NOT NULL,
+                        model_name VARCHAR NOT NULL,
+                        system_prompt VARCHAR NOT NULL,
+                        context INTEGER NOT NULL,
+                        max_tool_rounds INTEGER,
+                        PRIMARY KEY (level)
+                    )
+                    """
+                )
+                connection.exec_driver_sql(
+                    """
+                    INSERT INTO llm_api_config_new (
+                        level,
+                        base_url,
+                        api_key,
+                        model_name,
+                        system_prompt,
+                        context,
+                        max_tool_rounds
+                    )
+                    SELECT
+                        level,
+                        base_url,
+                        api_key,
+                        model_name,
+                        COALESCE(system_prompt, ''),
+                        COALESCE(context, 12000),
+                        max_tool_rounds
+                    FROM llm_api_config
+                    """
+                )
+                connection.exec_driver_sql("DROP TABLE llm_api_config")
+                connection.exec_driver_sql("ALTER TABLE llm_api_config_new RENAME TO llm_api_config")
 
 
 __all__ = ["LLMApiConfigManager"]
