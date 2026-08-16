@@ -168,8 +168,6 @@ llm_api_config
 ├── model_name
 ├── system_prompt
 ├── context
-├── context_limit_output_text
-├── tool_round_limit_output_text
 └── max_tool_rounds
 ```
 
@@ -187,8 +185,6 @@ LLMApiConfigManager().replace_configs([
         model_name="claude-opus-4-8",
         system_prompt="You are a careful and policy-compliant assistant.",
         context=12000,
-        context_limit_output_text="上下文超过限制",
-        tool_round_limit_output_text="调用超过次数限制",
         max_tool_rounds=5,
     ),
 ])
@@ -207,11 +203,9 @@ register_default_llms()
 说明：
 
 - `AgentPreset.intelevel` 会映射到对应的 LLM 配置
-- `context` 表示工作流允许的上下文长度上限；超限时不会继续请求 LLM，而是直接返回 `context_limit_output_text`
+- `context` 表示工作流允许的上下文长度上限；超限时不会继续请求 LLM，而是直接返回固定文案 `上下文超过限制`
 - `context` 的估算会计入 system prompt、user input、tool prompt、tool schema，以及累计的 tool result；因此不只是用户输入过长会触发超限，工具结果文本过长也会触发
-- `context_limit_output_text` 用于自定义上下文超限时返回给业务侧的提示文案
-- `max_tool_rounds` 用于限制最多可执行多少轮工具调用；超过后直接返回 `tool_round_limit_output_text`
-- `tool_round_limit_output_text` 用于自定义工具调用轮次超限时返回给业务侧的提示文案
+- `max_tool_rounds` 用于限制最多可执行多少轮工具调用；超过后直接返回固定文案 `调用超过次数限制`
 - 若未设置 `max_tool_rounds`，则允许继续执行多轮工具调用，直到 LLM 直接返回最终结果或命中上下文限制
 - 若等级或工具未注册，运行期解析会抛错
 - 当前配置适合本地开发，不建议把真实密钥提交到仓库

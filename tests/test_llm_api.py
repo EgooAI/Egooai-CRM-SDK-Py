@@ -52,8 +52,6 @@ class LLMApiTestCase(unittest.TestCase):
             self.assertEqual(levels[2].model_name, "claude-opus-4-8")
             self.assertIsNone(levels[2].system_prompt)
             self.assertEqual(levels[2].context, 12000)
-            self.assertEqual(levels[2].context_limit_output_text, "上下文超过限制")
-            self.assertEqual(levels[2].tool_round_limit_output_text, "调用超过次数限制")
 
     def test_load_default_llm_levels_uses_only_configured_levels(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -82,8 +80,6 @@ class LLMApiTestCase(unittest.TestCase):
                         2,
                         system_prompt="You are a careful assistant.",
                         context=4096,
-                        context_limit_output_text="文本超过限制",
-                        tool_round_limit_output_text="工具超过限制",
                         max_tool_rounds=5,
                     )
                 ],
@@ -93,8 +89,6 @@ class LLMApiTestCase(unittest.TestCase):
 
             self.assertEqual(levels[2].system_prompt, "You are a careful assistant.")
             self.assertEqual(levels[2].context, 4096)
-            self.assertEqual(levels[2].context_limit_output_text, "文本超过限制")
-            self.assertEqual(levels[2].tool_round_limit_output_text, "工具超过限制")
             self.assertEqual(levels[2].max_tool_rounds, 5)
 
     def test_register_default_llms_is_idempotent(self) -> None:

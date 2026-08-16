@@ -38,8 +38,6 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
             model_name="example-model",
             system_prompt="system",
             context=12000,
-            context_limit_output_text="context limit",
-            tool_round_limit_output_text="tool limit",
             max_tool_rounds=5,
         )
 

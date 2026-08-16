@@ -108,7 +108,6 @@ class AgentPipelineTestCase(unittest.TestCase):
                 api_key="secret",
                 model_name="example-model",
                 context=10,
-                context_limit_output_text="上下文超过限制",
             ),
         )
         preset = self._build_agent_preset(tools=[])
@@ -132,7 +131,6 @@ class AgentPipelineTestCase(unittest.TestCase):
                 api_key="secret",
                 model_name="example-model",
                 context=120,
-                context_limit_output_text="文本超过限制",
             ),
         )
         preset = self._build_agent_preset(tools=[])
@@ -145,7 +143,7 @@ class AgentPipelineTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.iterations, 0)
-        self.assertEqual(result.output_text, "文本超过限制")
+        self.assertEqual(result.output_text, "上下文超过限制")
         self.assertEqual(len(client.requests), 0)
 
     def test_run_executes_one_tool_round_and_returns_final_output(self) -> None:
@@ -302,7 +300,6 @@ class AgentPipelineTestCase(unittest.TestCase):
                 base_url="https://api.example.com/v1",
                 api_key="secret",
                 model_name="example-model",
-                tool_round_limit_output_text="调用超过次数限制",
                 max_tool_rounds=5,
             ),
         )

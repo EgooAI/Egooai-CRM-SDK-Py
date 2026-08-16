@@ -36,8 +36,6 @@ class LLMApiConfigManager:
                     "model_name": config.model_name,
                     "system_prompt": config.system_prompt,
                     "context": config.context,
-                    "context_limit_output_text": config.context_limit_output_text,
-                    "tool_round_limit_output_text": config.tool_round_limit_output_text,
                     "max_tool_rounds": config.max_tool_rounds,
                 }
                 for config in configs
@@ -59,8 +57,6 @@ class LLMApiConfigManager:
                 current.model_name = config.model_name
                 current.system_prompt = config.system_prompt
                 current.context = config.context
-                current.context_limit_output_text = config.context_limit_output_text
-                current.tool_round_limit_output_text = config.tool_round_limit_output_text
                 current.max_tool_rounds = config.max_tool_rounds
                 session.add(current)
                 session.commit()
@@ -84,8 +80,6 @@ class LLMApiConfigManager:
         target.model_name = source.model_name
         target.system_prompt = source.system_prompt
         target.context = source.context
-        target.context_limit_output_text = source.context_limit_output_text
-        target.tool_round_limit_output_text = source.tool_round_limit_output_text
         target.max_tool_rounds = source.max_tool_rounds
 
 

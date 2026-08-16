@@ -167,13 +167,7 @@ class AgentPipeline:
                     return AgentPipelineResult(
                         status="completed",
                         runtime=runtime,
-                        output_text=(
-                            runtime.llm.context_limit_output_text
-                            or (
-                                f"Context length exceeded limit: {current_context_length}>{context_limit}. "
-                                "Please handle this workflow on the business side."
-                            )
-                        ),
+                        output_text="上下文超过限制",
                         iterations=iterations,
                         tool_call=last_tool_call,
                         tool_result=tool_results[-1] if tool_results else None,
@@ -204,7 +198,7 @@ class AgentPipeline:
                 return AgentPipelineResult(
                     status="completed",
                     runtime=runtime,
-                    output_text=runtime.llm.tool_round_limit_output_text or "调用超过次数限制",
+                    output_text="调用超过次数限制",
                     iterations=iterations,
                     tool_call=last_tool_call,
                     tool_result=tool_results[-1] if tool_results else None,
