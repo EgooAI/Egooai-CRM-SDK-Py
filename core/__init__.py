@@ -15,15 +15,20 @@ from .message import MessageManager
 from .message_test import MessageTestManager
 from .meta import MetaManager
 from .platform import PlatformManager
-from .registry import LLMConfig, LLMRegistry, ToolRegistry, llm_registry, register_llm, register_tool, tool_registry
-from .session_meta import SessionMetaManager
-from .system_agents import (
-    CHAT_CUSTOMER_INTENT_AGENT_APID,
-    CHAT_CUSTOMER_STAGE_AGENT_APID,
-    CHAT_REPLY_SUGGESTION_AGENT_APID,
-    CHAT_TRANSLATION_AGENT_APID,
-    SYSTEM_AGENT_APIDS,
+from .registry import (
+    LLMConfig,
+    LLMRegistry,
+    OutputNormalizerRegistry,
+    ToolRegistry,
+    get_output_normalizer,
+    llm_registry,
+    output_normalizer_registry,
+    register_llm,
+    register_output_normalizer,
+    register_tool,
+    tool_registry,
 )
+from .session_meta import SessionMetaManager
 from .translate import TranslateManager
 
 __all__ = [
@@ -47,13 +52,12 @@ __all__ = [
     "LLMConfig",
     "ToolRegistry",
     "LLMRegistry",
+    "OutputNormalizerRegistry",
     "tool_registry",
     "llm_registry",
+    "output_normalizer_registry",
     "register_tool",
     "register_llm",
-    "CHAT_CUSTOMER_INTENT_AGENT_APID",
-    "CHAT_CUSTOMER_STAGE_AGENT_APID",
-    "CHAT_REPLY_SUGGESTION_AGENT_APID",
-    "CHAT_TRANSLATION_AGENT_APID",
-    "SYSTEM_AGENT_APIDS",
+    "register_output_normalizer",
+    "get_output_normalizer",
 ]

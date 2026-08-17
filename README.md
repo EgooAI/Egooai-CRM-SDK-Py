@@ -171,7 +171,7 @@ llm_api_config
 └── max_tool_rounds
 ```
 
-推荐通过 Web 端 `/agent` 页面的 “LLM 配置” 面板维护该表。也可以通过 Manager 写入：
+可以通过 `LLMApiConfigManager` 直接写入：
 
 ```python
 from core import LLMApiConfigManager

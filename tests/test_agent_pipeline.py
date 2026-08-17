@@ -13,8 +13,16 @@ from agent_pipeline import (
     ToolExecutionError,
     run_agent_preset,
 )
-from core import AgentPresetManager, LLMConfig, llm_registry, register_llm, register_tool, tool_registry
-from core.system_agents import CHAT_REPLY_SUGGESTION_AGENT_APID
+from core import (
+    AgentPresetManager,
+    LLMConfig,
+    llm_registry,
+    output_normalizer_registry,
+    register_llm,
+    register_output_normalizer,
+    register_tool,
+    tool_registry,
+)
 from models import AgentPreset
 
 
@@ -29,6 +37,7 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.manager.engine.dispose()
         tool_registry.clear()
         llm_registry.clear()
+        output_normalizer_registry.clear()
         self.temp_dir.cleanup()
 
     @staticmethod
@@ -176,15 +185,16 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertEqual(len(client.requests[1].tool_results), 1)
         self.assertEqual(client.requests[1].tool_results[0].content, {"keyword": "Alice", "match": "Alice"})
 
-    def test_system_agent_normalizes_direct_json_output(self) -> None:
+    def test_run_applies_registered_output_normalizer(self) -> None:
         register_llm(2, self._build_llm_config())
-        preset = self._build_agent_preset(
-            apid=CHAT_REPLY_SUGGESTION_AGENT_APID,
-            tools=[],
+        register_output_normalizer(
+            "normalized-agent",
+            lambda raw_text: f"[normalized] {raw_text}",
         )
+        preset = self._build_agent_preset(apid="normalized-agent", tools=[])
         client = StaticLLMClient([
             LLMResponse(
-                text='{"buyer_language":"English","items":[{"zh":"您好","reply":"Hello"}]}',
+                text='{"buyer_language":"English","items":[]}',
                 needs_tool=False,
                 raw={"turn": 1},
             ),
@@ -197,9 +207,22 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertEqual(result.iterations, 1)
         self.assertEqual(
             result.output_text,
-            '{"buyer_language": "English", "items": [{"zh": "您好", "reply": "Hello"}]}',
+            '[normalized] {"buyer_language":"English","items":[]}',
         )
         self.assertEqual(client.requests[0].tool_names, [])
+
+    def test_run_does_not_normalize_output_without_registered_normalizer(self) -> None:
+        register_llm(2, self._build_llm_config())
+        preset = self._build_agent_preset(apid="plain-agent", tools=[])
+        client = StaticLLMClient([
+            LLMResponse(text="plain answer", needs_tool=False, raw={"turn": 1}),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(result.output_text, "plain answer")
 
     def test_run_can_execute_multiple_tool_rounds(self) -> None:
         register_llm(2, self._build_llm_config())
