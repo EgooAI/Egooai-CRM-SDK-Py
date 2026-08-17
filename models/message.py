@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import JSON, Column
@@ -11,6 +12,7 @@ class Message(SQLModel, table=True):
     read: Optional[bool] = Field(default=None)
     content: Any = Field(sa_column=Column(JSON, nullable=False))
     type: str
+    created_at: Optional[datetime] = Field(default=None)
 
 
 __all__ = ["Message"]

@@ -18,8 +18,8 @@ class SessionMetaManagerTestCase(unittest.TestCase):
         self.manager.engine.dispose()
         self.temp_dir.cleanup()
 
-    def _build_session_meta(self, name: str = "session-a") -> SessionMeta:
-        return SessionMeta(name=name, participants=[1, 2])
+    def _build_session_meta(self, name: str = "session-a", key: str | None = None) -> SessionMeta:
+        return SessionMeta(key=key if key is not None else name, name=name, participants=[1, 2])
 
     def test_auto_creates_session_meta_table(self) -> None:
         self.assertTrue(self.db_path.exists())
@@ -47,6 +47,7 @@ class SessionMetaManagerTestCase(unittest.TestCase):
 
         self.assertIsNotNone(saved_session_meta)
         assert saved_session_meta is not None
+        self.assertEqual(saved_session_meta.key, "session-a")
         self.assertEqual(saved_session_meta.name, "session-a")
         self.assertEqual(saved_session_meta.participants, [1, 2])
 
@@ -80,13 +81,14 @@ class SessionMetaManagerTestCase(unittest.TestCase):
         session_meta = self._build_session_meta()
         self.manager.add_session_meta(session_meta)
 
-        updated_session_meta = SessionMeta(name="session-a-updated", participants=[8, 9])
+        updated_session_meta = SessionMeta(key="session-a-updated", name="session-a-updated", participants=[8, 9])
 
         self.manager.edit_session_meta(session_meta.sid, updated_session_meta)
         saved_session_meta = self.manager.get_session_meta(session_meta.sid)
 
         self.assertIsNotNone(saved_session_meta)
         assert saved_session_meta is not None
+        self.assertEqual(saved_session_meta.key, "session-a-updated")
         self.assertEqual(saved_session_meta.name, "session-a-updated")
         self.assertEqual(saved_session_meta.participants, [8, 9])
 
@@ -120,20 +122,40 @@ class SessionMetaManagerTestCase(unittest.TestCase):
     def test_upsert_session_meta_updates_existing_fields(self) -> None:
         session_meta = self._build_session_meta()
         self.manager.add_session_meta(session_meta)
-        updated_session_meta = SessionMeta(sid=session_meta.sid, name="session-updated", participants=[9, 10])
+        updated_session_meta = SessionMeta(
+            sid=session_meta.sid,
+            key="session-updated",
+            name="session-updated",
+            participants=[9, 10],
+        )
 
         self.manager.upsert_session_meta(updated_session_meta)
         saved_session_meta = self.manager.get_session_meta(session_meta.sid)
 
         self.assertIsNotNone(saved_session_meta)
         assert saved_session_meta is not None
+        self.assertEqual(saved_session_meta.key, "session-updated")
         self.assertEqual(saved_session_meta.name, "session-updated")
         self.assertEqual(saved_session_meta.participants, [9, 10])
 
     def test_upsert_session_meta_skips_duplicate_payload_without_primary_key(self) -> None:
         session_meta = self._build_session_meta()
         self.manager.add_session_meta(session_meta)
-        duplicate_session_meta = SessionMeta(name="session-a", participants=[1, 2])
+        duplicate_session_meta = SessionMeta(key="session-a", name="session-a", participants=[1, 2])
+
+        self.manager.upsert_session_meta(duplicate_session_meta)
+
+        self.assertEqual(len(self.manager.list_session_meta()), 1)
+        self.assertEqual(duplicate_session_meta.sid, session_meta.sid)
+
+    def test_upsert_session_meta_matches_by_key_without_primary_key(self) -> None:
+        session_meta = self._build_session_meta(name="session-key-match", key="platform:self:contact")
+        self.manager.add_session_meta(session_meta)
+        duplicate_session_meta = SessionMeta(
+            key="platform:self:contact",
+            name="renamed-display",
+            participants=[1, 2],
+        )
 
         self.manager.upsert_session_meta(duplicate_session_meta)
 
@@ -141,7 +163,7 @@ class SessionMetaManagerTestCase(unittest.TestCase):
         self.assertEqual(duplicate_session_meta.sid, session_meta.sid)
 
     def test_upsert_session_meta_raises_when_explicit_primary_key_missing(self) -> None:
-        missing_session_meta = SessionMeta(sid=999, name="ghost-session", participants=[0])
+        missing_session_meta = SessionMeta(sid=999, key="ghost", name="ghost-session", participants=[0])
 
         with self.assertRaises(ValueError):
             self.manager.upsert_session_meta(missing_session_meta)

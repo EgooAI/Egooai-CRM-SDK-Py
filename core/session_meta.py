@@ -15,7 +15,7 @@ class SessionMetaManager:
 
     @staticmethod
     def _payload_tuple(session_meta: SessionMeta) -> tuple[object, ...]:
-        return (session_meta.name, session_meta.participants)
+        return (session_meta.key, session_meta.name, session_meta.participants)
 
     @staticmethod
     def _sync_session_meta_state(target: SessionMeta, source: SessionMeta) -> None:
@@ -23,15 +23,15 @@ class SessionMetaManager:
 
     @staticmethod
     def _apply_session_meta_updates(current_session_meta: SessionMeta, session_meta: SessionMeta) -> None:
+        current_session_meta.key = session_meta.key
         current_session_meta.name = session_meta.name
         current_session_meta.participants = session_meta.participants
 
     def _find_matching_session_meta(self, session: Session, session_meta: SessionMeta) -> Optional[SessionMeta]:
-        statement = select(SessionMeta)
-        for existing_session_meta in session.exec(statement).all():
-            if self._payload_tuple(existing_session_meta) == self._payload_tuple(session_meta):
-                return existing_session_meta
-        return None
+        if not session_meta.key:
+            return None
+        statement = select(SessionMeta).where(SessionMeta.key == session_meta.key)
+        return session.exec(statement).first()
 
     def add_session_meta(self, session_meta: SessionMeta) -> None:
         with self._lock:

@@ -46,7 +46,11 @@ class AccountManager:
         current_account.updated_time = utc_now()
 
     def _find_matching_account(self, session: Session, account: Account) -> Optional[Account]:
-        statement = select(Account)
+        statement = select(Account).where(
+            Account.cid == account.cid,
+            Account.pid == account.pid,
+            Account.account == account.account,
+        )
         for existing_account in session.exec(statement).all():
             if self._payload_tuple(existing_account) == self._payload_tuple(account):
                 return existing_account

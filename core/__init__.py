@@ -10,9 +10,9 @@ from .agent_preset_resolver import (
     resolve_agent_preset_by_apid,
 )
 from .customer import CustomerManager
+from .chat_history import ChatHistoryManager
 from .llm_api_config import LLMApiConfigManager
 from .message import MessageManager
-from .message_test import MessageTestManager
 from .meta import MetaManager
 from .platform import PlatformManager
 from .registry import (
@@ -45,7 +45,7 @@ __all__ = [
     "require_agent_preset_by_apid",
     "PlatformManager",
     "MessageManager",
-    "MessageTestManager",
+    "ChatHistoryManager",
     "SessionMetaManager",
     "TranslateManager",
     "MetaManager",

@@ -1,5 +1,6 @@
 import sqlite3
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -69,6 +70,7 @@ class MessageManagerTestCase(unittest.TestCase):
         external_mid: str = "msg-001",
         sid: int = 1,
         sender: int = 1,
+        created_at: datetime | None = None,
     ) -> Message:
         return Message(
             external_mid=external_mid,
@@ -77,6 +79,7 @@ class MessageManagerTestCase(unittest.TestCase):
             read=False,
             content={"text": "hello"},
             type="text",
+            created_at=created_at,
         )
 
     def test_auto_creates_message_table(self) -> None:
@@ -114,6 +117,23 @@ class MessageManagerTestCase(unittest.TestCase):
         self.assertFalse(saved_message.read)
         self.assertEqual(saved_message.content, {"text": "hello"})
         self.assertEqual(saved_message.type, "text")
+
+    def test_message_persists_created_at(self) -> None:
+        account = self._add_account()
+        session_meta = self._add_session_meta()
+        created_at = datetime(2026, 7, 1, 12, 30, 0, tzinfo=timezone.utc)
+        message = self._build_message(
+            sid=session_meta.sid,
+            sender=account.aid,
+            created_at=created_at,
+        )
+
+        self.manager.add_message(message)
+        saved_message = self.manager.get_message(message.external_mid)
+
+        self.assertIsNotNone(saved_message)
+        assert saved_message is not None
+        self.assertEqual(saved_message.created_at, created_at.replace(tzinfo=None))
 
     def test_get_message_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_message("missing-mid"))

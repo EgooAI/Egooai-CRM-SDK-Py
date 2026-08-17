@@ -21,6 +21,7 @@ class MessageManager:
             message.read,
             message.content,
             message.type,
+            message.created_at,
         )
 
     @staticmethod
@@ -30,6 +31,7 @@ class MessageManager:
         current_message.read = message.read
         current_message.content = message.content
         current_message.type = message.type
+        current_message.created_at = message.created_at
 
     def add_message(self, message: Message) -> None:
         with self._lock:

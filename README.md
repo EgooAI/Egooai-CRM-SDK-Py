@@ -31,6 +31,7 @@ uv sync
 - `PlatformManager`
 - `SessionMetaManager`
 - `MessageManager`
+- `ChatHistoryManager`
 - `TranslateManager`
 - `MetaManager`
 - `AgentPresetManager`
@@ -43,6 +44,7 @@ uv sync
 - `Platform`
 - `SessionMeta`
 - `Message`
+- `ChatHistory`
 - `Translate`
 - `Meta`
 - `AgentPreset`
@@ -224,6 +226,16 @@ register_default_llms()
 from utils import ThreadPoolScheduler
 ```
 
+## Schema 迁移
+
+`bootstrap_engine` 在 `create_all` 之后会自动执行版本化迁移，版本号记录在 `meta` 表的 `schema_version` 键中：
+
+- 每次启动自动运行，已应用的迁移不会重复执行
+- 迁移只使用幂等的 DDL/DML，存量数据库原地升级，新库直接建出目标 schema
+- 涉及的表改名（例如早期的 `message_test` → `chat_history`）会在 `create_all` 之前执行
+
+新增迁移时，在 `utils/migration.py` 中定义形如 `_migrate_00XX_*` 的函数并登记到 `MIGRATIONS` 列表即可。
+
 ## 测试
 
 ```bash
@@ -240,5 +252,4 @@ python -m unittest tests.test_llm_api
 ## 注意事项
 
 - 这是本地 SQLite 数据层，不适合高并发服务场景
-- 当前没有 schema migration 机制
 - 当前导入方式以仓库内直接使用为主，例如 `from core import ...`
