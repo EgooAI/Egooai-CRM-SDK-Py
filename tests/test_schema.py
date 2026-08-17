@@ -33,9 +33,9 @@ class SchemaTestCase(unittest.TestCase):
         self.assertIn("ix_message_sid", indexes)
         self.assertIn("ix_message_sender", indexes)
 
-    def test_sessionmeta_key_index_is_unique(self) -> None:
-        indexes = dict(self._index_list("sessionmeta"))
-        self.assertEqual(indexes["ix_sessionmeta_key"], 1)
+    def test_session_meta_key_index_is_unique(self) -> None:
+        indexes = dict(self._index_list("session_meta"))
+        self.assertEqual(indexes["ix_session_meta_key"], 1)
 
     def test_account_mapping_composite_index(self) -> None:
         self.assertIn("idx_account_mapping_type_key", self._index_names("accountmapping"))

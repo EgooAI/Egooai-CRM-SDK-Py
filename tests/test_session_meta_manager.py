@@ -30,7 +30,7 @@ class SessionMetaManagerTestCase(unittest.TestCase):
         finally:
             connection.close()
 
-        self.assertIn("sessionmeta", tables)
+        self.assertIn("session_meta", tables)
 
     def test_add_session_meta_populates_primary_key(self) -> None:
         session_meta = self._build_session_meta()

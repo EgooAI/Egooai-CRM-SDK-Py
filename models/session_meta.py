@@ -5,6 +5,8 @@ from sqlmodel import Field, SQLModel
 
 
 class SessionMeta(SQLModel, table=True):
+    __tablename__ = "session_meta"
+
     sid: Optional[int] = Field(default=None, primary_key=True)
     key: Optional[str] = Field(default=None, index=True, unique=True)
     name: Optional[str] = Field(default=None)

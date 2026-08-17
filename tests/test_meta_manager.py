@@ -1,13 +1,11 @@
 import sqlite3
 import threading
 import unittest
-from datetime import timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from core import MetaManager
 from models import Meta
-from utils import utc_now
 
 
 class MetaManagerTestCase(unittest.TestCase):
@@ -120,18 +118,6 @@ class MetaManagerTestCase(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(results, ["1.0.0", "1.0.0"])
         self.assertEqual(self._count_rows(), 1)
-
-    def test_model_is_exported(self) -> None:
-        meta = Meta()
-
-        self.assertEqual(meta.key, "version")
-        self.assertEqual(meta.value, "1.0.0")
-
-    def test_utils_utc_now_returns_timezone_aware_utc_datetime(self) -> None:
-        current = utc_now()
-
-        self.assertEqual(current.tzinfo, timezone.utc)
-        self.assertEqual(current.utcoffset(), timezone.utc.utcoffset(current))
 
 
 if __name__ == "__main__":

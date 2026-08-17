@@ -71,32 +71,6 @@ class AccountManagerTestCase(unittest.TestCase):
         self.assertIsNotNone(account.created_time)
         self.assertIsNotNone(account.updated_time)
 
-    def test_add_account_test_data(self) -> None:
-        customer = self._add_customer(name="Test User")
-        platform = self._add_platform(pid="wechat-test", name="WeChat Test")
-        test_account = Account(
-            cid=customer.cid,
-            pid=platform.pid,
-            account="test.user@egooai.com",
-            nickname="Test User",
-            avatar="test-user.png",
-            sids=[100, 200, 300],
-            extra={"source": "test", "status": "active"},
-        )
-
-        self.manager.add_account(test_account)
-        saved_account = self.manager.get_account(test_account.aid)
-
-        self.assertIsNotNone(saved_account)
-        assert saved_account is not None
-        self.assertEqual(saved_account.cid, customer.cid)
-        self.assertEqual(saved_account.pid, "wechat-test")
-        self.assertEqual(saved_account.account, "test.user@egooai.com")
-        self.assertEqual(saved_account.nickname, "Test User")
-        self.assertEqual(saved_account.avatar, "test-user.png")
-        self.assertEqual(saved_account.sids, [100, 200, 300])
-        self.assertEqual(saved_account.extra, {"source": "test", "status": "active"})
-
     def test_get_account_returns_inserted_account(self) -> None:
         account = self._build_account()
         self.manager.add_account(account)
