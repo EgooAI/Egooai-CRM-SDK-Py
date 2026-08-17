@@ -12,7 +12,3 @@ class LLMInvocationError(AgentPipelineError):
 
 class ToolSelectionError(AgentPipelineError):
     """LLM 选择了未注册或未授权的工具。"""
-
-
-class ToolExecutionError(AgentPipelineError):
-    """工具执行失败。"""

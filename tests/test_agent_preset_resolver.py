@@ -2,18 +2,13 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import (
-    AgentPresetManager,
-    AgentPresetResolver,
-    LLMConfig,
-    llm_registry,
-    register_llm,
-    register_tool,
+from agent_pipeline.registry import LLMConfig, llm_registry, register_llm, register_tool, tool_registry
+from agent_pipeline.resolver import (
     require_agent_preset_by_apid,
     resolve_agent_preset,
     resolve_agent_preset_by_apid,
-    tool_registry,
 )
+from core import AgentPresetManager
 from models import AgentPreset
 
 
@@ -49,7 +44,7 @@ class AgentPresetResolverTestCase(unittest.TestCase):
     def _build_agent_preset(
         self,
         apid: str = "default-assistant",
-        intelevel: int = 2,
+        llm_level: int = 2,
         tools: list[str] | None = None,
     ) -> AgentPreset:
         payload = {
@@ -57,13 +52,13 @@ class AgentPresetResolverTestCase(unittest.TestCase):
             "name": "default assistant",
             "description": "General customer service preset",
             "prompt": "Help the customer politely",
-            "intelevel": intelevel,
+            "llm_level": llm_level,
         }
         if tools is not None:
             payload["tools"] = tools
         return AgentPreset(**payload)
 
-    def test_resolve_agent_preset_maps_intelevel_and_tools(self) -> None:
+    def test_resolve_agent_preset_maps_llm_level_and_tools(self) -> None:
         register_llm(2, self._build_llm_config(model_name="resolved-model"))
         register_tool("search_customer", self._search_tool)
         register_tool("calendar", self._calendar_tool)
@@ -79,14 +74,14 @@ class AgentPresetResolverTestCase(unittest.TestCase):
 
     def test_resolve_agent_preset_requires_registered_llm_level(self) -> None:
         register_tool("search_customer", self._search_tool)
-        agent_preset = self._build_agent_preset(tools=["search_customer"], intelevel=2)
+        agent_preset = self._build_agent_preset(tools=["search_customer"], llm_level=2)
 
         with self.assertRaises(KeyError):
             resolve_agent_preset(agent_preset)
 
     def test_resolve_agent_preset_requires_registered_tool_name(self) -> None:
         register_llm(2, self._build_llm_config())
-        agent_preset = self._build_agent_preset(tools=["missing_tool"], intelevel=2)
+        agent_preset = self._build_agent_preset(tools=["missing_tool"], llm_level=2)
 
         with self.assertRaises(KeyError):
             resolve_agent_preset(agent_preset)
@@ -123,7 +118,7 @@ class AgentPresetResolverTestCase(unittest.TestCase):
             require_agent_preset_by_apid(self.manager, "missing")
 
     def test_agent_preset_manager_does_not_require_registries_for_crud(self) -> None:
-        agent_preset = self._build_agent_preset(apid="unregistered", intelevel=2, tools=["unknown_tool"])
+        agent_preset = self._build_agent_preset(apid="unregistered", llm_level=2, tools=["unknown_tool"])
 
         self.manager.add_agent_preset(agent_preset)
         saved_agent_preset = self.manager.get_agent_preset("unregistered")
@@ -131,18 +126,7 @@ class AgentPresetResolverTestCase(unittest.TestCase):
         self.assertIsNotNone(saved_agent_preset)
         assert saved_agent_preset is not None
         self.assertEqual(saved_agent_preset.tools, ["unknown_tool"])
-        self.assertEqual(saved_agent_preset.intelevel, 2)
-
-    def test_agent_preset_resolver_class_methods_match_helper_functions(self) -> None:
-        register_llm(2, self._build_llm_config())
-        register_tool("search_customer", self._search_tool)
-        agent_preset = self._build_agent_preset(apid="saved", tools=["search_customer"])
-        self.manager.add_agent_preset(agent_preset)
-        resolver = AgentPresetResolver()
-
-        runtime = resolver.require_by_apid(self.manager, "saved")
-
-        self.assertEqual(runtime, require_agent_preset_by_apid(self.manager, "saved"))
+        self.assertEqual(saved_agent_preset.llm_level, 2)
 
 
 if __name__ == "__main__":

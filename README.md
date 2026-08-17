@@ -51,15 +51,17 @@ uv sync
 
 ### Registry
 
-`core` 提供两个进程内注册表：
+`agent_pipeline.registry` 提供三个进程内注册表：
 
 - `tool_registry`：注册工具函数
-- `llm_registry`：按 `intelevel` 注册 LLM 配置
+- `llm_registry`：按 `llm_level` 注册 LLM 配置
+- `output_normalizer_registry`：按 Agent 的 `apid` 注册输出归一化函数
 
 常用入口：
 
 ```python
-from core import register_tool, register_llm, tool_registry, llm_registry, resolve_agent_preset
+from agent_pipeline.registry import register_tool, register_llm, tool_registry, llm_registry
+from agent_pipeline.resolver import resolve_agent_preset
 ```
 
 ### Agent Pipeline
@@ -126,7 +128,7 @@ manager.upsert_agent_preset(
         name="Math Assistant",
         description="Use math tools when needed",
         prompt="You are a precise math assistant.",
-        intelevel=2,
+        llm_level=2,
         tools=["calculate"],
     )
 )
@@ -204,11 +206,11 @@ register_default_llms()
 
 说明：
 
-- `AgentPreset.intelevel` 会映射到对应的 LLM 配置
-- `context` 表示工作流允许的上下文长度上限；超限时不会继续请求 LLM，而是直接返回固定文案 `上下文超过限制`
+- `AgentPreset.llm_level` 会映射到对应的 LLM 配置
+- `context` 表示工作流允许的上下文长度上限；超限时不会继续请求 LLM，结果状态为 `context_limited`，由调用方决定提示文案
 - `context` 的估算会计入 system prompt、user input、tool prompt、tool schema，以及累计的 tool result；因此不只是用户输入过长会触发超限，工具结果文本过长也会触发
-- `max_tool_rounds` 用于限制最多可执行多少轮工具调用；超过后直接返回固定文案 `调用超过次数限制`
-- 若未设置 `max_tool_rounds`，则允许继续执行多轮工具调用，直到 LLM 直接返回最终结果或命中上下文限制
+- `max_tool_rounds` 用于限制最多可执行多少轮工具调用；超过后结果状态为 `tool_rounds_limited`，由调用方决定提示文案
+- 若未设置 `max_tool_rounds`，SDK 使用默认上限 10，避免无限循环
 - 若等级或工具未注册，运行期解析会抛错
 - 当前配置适合本地开发，不建议把真实密钥提交到仓库
 
@@ -225,16 +227,6 @@ register_default_llms()
 ```python
 from utils import ThreadPoolScheduler
 ```
-
-## Schema 迁移
-
-`bootstrap_engine` 在 `create_all` 之后会自动执行版本化迁移，版本号记录在 `meta` 表的 `schema_version` 键中：
-
-- 每次启动自动运行，已应用的迁移不会重复执行
-- 迁移只使用幂等的 DDL/DML，存量数据库原地升级，新库直接建出目标 schema
-- 涉及的表改名（例如早期的 `message_test` → `chat_history`）会在 `create_all` 之前执行
-
-新增迁移时，在 `utils/migration.py` 中定义形如 `_migrate_00XX_*` 的函数并登记到 `MIGRATIONS` 列表即可。
 
 ## 测试
 

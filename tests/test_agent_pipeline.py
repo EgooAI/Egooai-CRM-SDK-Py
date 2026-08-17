@@ -1,21 +1,17 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 
 from agent_pipeline import (
     AgentPipeline,
     AgentPipelineInput,
+    AgentPipelineResultStatus,
     AgentPresetResolutionError,
+    LLMConfig,
     LLMInvocationError,
     LLMResponse,
     LLMToolCall,
-    StaticLLMClient,
-    ToolExecutionError,
-    run_agent_preset,
-)
-from core import (
-    AgentPresetManager,
-    LLMConfig,
     llm_registry,
     output_normalizer_registry,
     register_llm,
@@ -23,6 +19,8 @@ from core import (
     register_tool,
     tool_registry,
 )
+from agent_pipeline.llm import StaticLLMClient
+from core import AgentPresetManager
 from models import AgentPreset
 
 
@@ -67,7 +65,7 @@ class AgentPipelineTestCase(unittest.TestCase):
             "name": "default assistant",
             "description": "General customer service preset",
             "prompt": "Help the customer politely",
-            "intelevel": 2,
+            "llm_level": 2,
         }
         if tools is not None:
             payload["tools"] = tools
@@ -84,14 +82,13 @@ class AgentPipelineTestCase(unittest.TestCase):
             AgentPipelineInput(user_input="hello", agent_preset=preset)
         )
 
-        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.status, AgentPipelineResultStatus.COMPLETED)
         self.assertEqual(result.output_text, "direct answer")
         self.assertEqual(result.iterations, 1)
         self.assertIsNone(result.tool_call)
         self.assertIsNone(result.tool_result)
         self.assertEqual(len(client.requests), 1)
         self.assertEqual(client.requests[0].system_prompt, "Help the customer politely")
-        self.assertEqual(client.requests[0].tool_names, [])
 
     def test_run_combines_llm_and_agent_system_prompts(self) -> None:
         register_llm(2, self._build_llm_config_with_system_prompt("Follow company policy."))
@@ -109,7 +106,7 @@ class AgentPipelineTestCase(unittest.TestCase):
             "Follow company policy.\n\nHelp the customer politely",
         )
 
-    def test_run_returns_business_prompt_when_context_limit_is_exceeded(self) -> None:
+    def test_run_returns_context_limited_status_when_context_limit_is_exceeded(self) -> None:
         register_llm(
             2,
             LLMConfig(
@@ -129,10 +126,11 @@ class AgentPipelineTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.iterations, 0)
-        self.assertEqual(result.output_text, "上下文超过限制")
+        self.assertEqual(result.status, AgentPipelineResultStatus.CONTEXT_LIMITED)
+        self.assertEqual(result.output_text, "")
         self.assertEqual(len(client.requests), 0)
 
-    def test_run_returns_business_prompt_when_user_input_text_exceeds_context_limit(self) -> None:
+    def test_run_returns_context_limited_status_when_user_input_text_exceeds_context_limit(self) -> None:
         register_llm(
             2,
             LLMConfig(
@@ -152,7 +150,8 @@ class AgentPipelineTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.iterations, 0)
-        self.assertEqual(result.output_text, "上下文超过限制")
+        self.assertEqual(result.status, AgentPipelineResultStatus.CONTEXT_LIMITED)
+        self.assertEqual(result.output_text, "")
         self.assertEqual(len(client.requests), 0)
 
     def test_run_executes_one_tool_round_and_returns_final_output(self) -> None:
@@ -209,7 +208,6 @@ class AgentPipelineTestCase(unittest.TestCase):
             result.output_text,
             '[normalized] {"buyer_language":"English","items":[]}',
         )
-        self.assertEqual(client.requests[0].tool_names, [])
 
     def test_run_does_not_normalize_output_without_registered_normalizer(self) -> None:
         register_llm(2, self._build_llm_config())
@@ -274,11 +272,8 @@ class AgentPipelineTestCase(unittest.TestCase):
             LLMResponse(text="resolved by apid", needs_tool=False),
         ])
 
-        result = run_agent_preset(
-            llm_client=client,
-            user_input="hello",
-            manager=self.manager,
-            apid="saved",
+        result = AgentPipeline(llm_client=client, manager=self.manager).run(
+            AgentPipelineInput(user_input="hello", apid="saved")
         )
 
         self.assertEqual(result.runtime.preset.apid, "saved")
@@ -316,7 +311,7 @@ class AgentPipelineTestCase(unittest.TestCase):
         with self.assertRaises(LLMInvocationError):
             AgentPipeline(llm_client=client).run(AgentPipelineInput(user_input="hello", agent_preset=preset))
 
-    def test_run_returns_unknown_after_more_than_five_tool_rounds(self) -> None:
+    def test_run_returns_tool_rounds_limited_after_five_tool_rounds(self) -> None:
         register_llm(
             2,
             LLMConfig(
@@ -365,8 +360,10 @@ class AgentPipelineTestCase(unittest.TestCase):
             AgentPipelineInput(user_input="hello", agent_preset=preset)
         )
 
-        self.assertEqual(result.output_text, "调用超过次数限制")
-        self.assertEqual(result.iterations, 6)
+        self.assertEqual(result.status, AgentPipelineResultStatus.TOOL_ROUNDS_LIMITED)
+        self.assertEqual(result.output_text, "")
+        self.assertEqual(result.iterations, 5)
+        self.assertEqual(len(client.requests), 5)
         self.assertIsNotNone(result.tool_call)
         assert result.tool_call is not None
         self.assertEqual(result.tool_call.name, "search_customer")
@@ -374,7 +371,7 @@ class AgentPipelineTestCase(unittest.TestCase):
         assert result.tool_result is not None
         self.assertEqual(result.tool_result.content, {"keyword": "Eve"})
 
-    def test_run_allows_more_than_five_tool_rounds_when_config_has_no_limit(self) -> None:
+    def test_run_allows_multiple_tool_rounds_when_config_has_no_limit(self) -> None:
         register_llm(2, self._build_llm_config())
         register_tool("search_customer", lambda keyword: {"keyword": keyword})
         preset = self._build_agent_preset(tools=["search_customer"])
@@ -425,7 +422,7 @@ class AgentPipelineTestCase(unittest.TestCase):
         assert result.tool_result is not None
         self.assertEqual(result.tool_result.content, {"keyword": "Frank"})
 
-    def test_run_raises_tool_execution_error_when_callable_fails(self) -> None:
+    def test_run_feeds_tool_errors_back_to_llm_and_continues(self) -> None:
         register_llm(2, self._build_llm_config())
 
         def broken_tool(**kwargs):
@@ -439,10 +436,58 @@ class AgentPipelineTestCase(unittest.TestCase):
                 needs_tool=True,
                 tool_call=LLMToolCall(name="broken_tool", tool_input={"keyword": "Alice"}),
             ),
+            LLMResponse(text="recovered answer", needs_tool=False),
         ])
 
-        with self.assertRaises(ToolExecutionError):
-            AgentPipeline(llm_client=client).run(AgentPipelineInput(user_input="hello", agent_preset=preset))
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(result.output_text, "recovered answer")
+        self.assertEqual(result.iterations, 2)
+        self.assertIsNotNone(result.tool_result)
+        assert result.tool_result is not None
+        self.assertFalse(result.tool_result.ok)
+        self.assertEqual(result.tool_result.error, "boom")
+        self.assertEqual(client.requests[1].tool_results[0].error, "boom")
+
+
+    def test_annotation_to_json_type_maps_parameterized_annotations(self) -> None:
+        cases = {
+            int: "number",
+            float: "number",
+            bool: "boolean",
+            dict: "object",
+            list: "array",
+            str: "string",
+            "int | None": "number",
+            "dict[str, Any]": "object",
+            "list[int]": "array",
+        }
+        for annotation, expected in cases.items():
+            if isinstance(annotation, str):
+                annotation = eval(annotation, {"Any": Any})
+            with self.subTest(annotation=annotation):
+                self.assertEqual(AgentPipeline._annotation_to_json_type(annotation), expected)
+
+    def test_tool_schema_uses_parameterized_annotations(self) -> None:
+        register_llm(2, self._build_llm_config())
+
+        def lookup(params: dict[str, Any], limit: int | None = None) -> str:
+            return "ok"
+
+        register_tool("lookup", lookup)
+        preset = self._build_agent_preset(tools=["lookup"])
+        client = StaticLLMClient([
+            LLMResponse(text="answer", needs_tool=False),
+        ])
+
+        AgentPipeline(llm_client=client).run(AgentPipelineInput(user_input="hello", agent_preset=preset))
+
+        schema = client.requests[0].tool_schemas[0]
+        self.assertEqual(schema.parameters["properties"]["params"]["type"], "object")
+        self.assertEqual(schema.parameters["properties"]["limit"]["type"], "number")
+        self.assertNotIn("limit", schema.parameters["required"])
 
 
 if __name__ == "__main__":

@@ -9,12 +9,14 @@ from agent_pipeline import (
     LLMResponse,
     LLMToolCall,
     OpenAICompatibleLLMClient,
-    StaticLLMClient,
     ToolExecutionResult,
 )
+from agent_pipeline.llm import StaticLLMClient
 from agent_pipeline.llm_api import load_default_llm_levels, register_default_llms
+from agent_pipeline.registry import LLMConfig, llm_registry, tool_registry
+from agent_pipeline.resolver import resolve_agent_preset
 from agent_pipeline.types import LLMToolSchema
-from core import AgentPresetManager, LLMApiConfigManager, LLMConfig, llm_registry, tool_registry
+from core import AgentPresetManager, LLMApiConfigManager
 from models import AgentPreset, LLMApiConfig
 
 
@@ -22,6 +24,12 @@ class LLMApiTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         llm_registry.clear()
         tool_registry.clear()
+
+    @staticmethod
+    def _dispose_shared_engine(db_path: Path) -> None:
+        from utils.common import bootstrap_engine
+
+        bootstrap_engine(db_path)[1].dispose()
 
     @staticmethod
     def _config(level: int, model_name: str = "claude-opus-4-8", **overrides) -> LLMApiConfig:
@@ -52,6 +60,7 @@ class LLMApiTestCase(unittest.TestCase):
             self.assertEqual(levels[2].model_name, "claude-opus-4-8")
             self.assertIsNone(levels[2].system_prompt)
             self.assertEqual(levels[2].context, 12000)
+            self._dispose_shared_engine(db_path)
 
     def test_load_default_llm_levels_uses_only_configured_levels(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -69,6 +78,7 @@ class LLMApiTestCase(unittest.TestCase):
             self.assertEqual(sorted(levels.keys()), [0, 4])
             self.assertEqual(levels[0].model_name, "claude-opus-4-8")
             self.assertEqual(levels[4].model_name, "claude-sonnet-5")
+            self._dispose_shared_engine(db_path)
 
     def test_load_default_llm_levels_maps_optional_fields(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -90,6 +100,7 @@ class LLMApiTestCase(unittest.TestCase):
             self.assertEqual(levels[2].system_prompt, "You are a careful assistant.")
             self.assertEqual(levels[2].context, 4096)
             self.assertEqual(levels[2].max_tool_rounds, 5)
+            self._dispose_shared_engine(db_path)
 
     def test_register_default_llms_is_idempotent(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -106,18 +117,20 @@ class LLMApiTestCase(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(first[0].system_prompt, "You are a careful assistant.")
             self.assertEqual(first[0].context, 4096)
+            self._dispose_shared_engine(db_path)
 
-    def test_register_default_llms_raises_when_config_table_is_empty(self) -> None:
+    def test_register_default_llms_returns_empty_when_config_table_is_empty(self) -> None:
         with TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "llm_api.sqlite"
             LLMApiConfigManager(database_path=db_path).engine.dispose()
 
-            with self.assertRaises(ValueError):
-                register_default_llms(db_path)
+            levels = register_default_llms(db_path)
+
+            self.assertEqual(levels, {})
+            self.assertEqual(llm_registry.list(), {})
+            self._dispose_shared_engine(db_path)
 
     def test_agent_preset_resolver_can_use_database_registrations(self) -> None:
-        from core import resolve_agent_preset
-
         with TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "llm_api.sqlite"
             self._write_configs(db_path, [self._config(2)])
@@ -127,13 +140,14 @@ class LLMApiTestCase(unittest.TestCase):
                 name="default assistant",
                 description="General customer service preset",
                 prompt="Help the customer politely",
-                intelevel=2,
+                llm_level=2,
                 tools=[],
             )
 
             runtime = resolve_agent_preset(agent_preset)
 
             self.assertEqual(runtime.llm.model_name, "claude-opus-4-8")
+            self._dispose_shared_engine(db_path)
 
     def test_agent_pipeline_can_use_database_registrations(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -147,7 +161,7 @@ class LLMApiTestCase(unittest.TestCase):
                     name="default assistant",
                     description="General customer service preset",
                     prompt="Help the customer politely",
-                    intelevel=2,
+                    llm_level=2,
                     tools=[],
                 )
                 manager.add_agent_preset(preset)
@@ -163,6 +177,7 @@ class LLMApiTestCase(unittest.TestCase):
                 self.assertEqual(result.runtime.llm.model_name, "claude-opus-4-8")
             finally:
                 manager.engine.dispose()
+            self._dispose_shared_engine(db_path)
 
     def test_openai_client_replays_tool_history_with_tool_messages(self) -> None:
         client = OpenAICompatibleLLMClient(
@@ -176,7 +191,6 @@ class LLMApiTestCase(unittest.TestCase):
             LLMRequest(
                 system_prompt="You are helpful.",
                 user_input="What is 7*8?",
-                tool_names=["calculate"],
                 tool_prompt="Available tools:\n- calculate",
                 tool_schemas=[
                     LLMToolSchema(
@@ -208,7 +222,6 @@ class LLMApiTestCase(unittest.TestCase):
         self.assertEqual(messages[2]["tool_calls"][0]["function"]["name"], "calculate")
         self.assertEqual(messages[3]["tool_call_id"], "call_abc")
         self.assertEqual(messages[3]["content"], "56")
-        self.assertNotIn("Executed tool results", messages[0]["content"])
 
 
 if __name__ == "__main__":

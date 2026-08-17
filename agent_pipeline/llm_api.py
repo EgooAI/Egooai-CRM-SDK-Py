@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core import LLMConfig, register_llm
+from agent_pipeline.registry import LLMConfig, register_llm
 from core.llm_api_config import LLMApiConfigManager
 
 
@@ -12,13 +12,7 @@ def _none_if_empty(value: str | None) -> str | None:
 
 def load_default_llm_levels(database_path: Path | str | None = None) -> dict[int, LLMConfig]:
     manager = LLMApiConfigManager(database_path)
-    try:
-        configs = manager.list_configs()
-    finally:
-        manager.engine.dispose()
-
-    if not configs:
-        raise ValueError("LLM config not found in llm_api_config table")
+    configs = manager.list_configs()
 
     return {
         config.level: LLMConfig(

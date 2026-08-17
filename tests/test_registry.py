@@ -1,6 +1,14 @@
 import unittest
 
-from core import LLMConfig, LLMRegistry, ToolRegistry, llm_registry, register_llm, register_tool, tool_registry
+from agent_pipeline.registry import (
+    LLMConfig,
+    LLMRegistry,
+    ToolRegistry,
+    llm_registry,
+    register_llm,
+    register_tool,
+    tool_registry,
+)
 
 
 class RegistryTestCase(unittest.TestCase):

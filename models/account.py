@@ -1,13 +1,15 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, Index
 from sqlmodel import Field, SQLModel
 
 from utils.common import utc_now
 
 
 class Account(SQLModel, table=True):
+    __table_args__ = (Index("idx_account_cid_pid_account", "cid", "pid", "account"),)
+
     aid: Optional[int] = Field(default=None, primary_key=True)
     cid: int = Field(foreign_key="customer.cid")
     pid: Optional[str] = Field(default=None, foreign_key="platform.pid")

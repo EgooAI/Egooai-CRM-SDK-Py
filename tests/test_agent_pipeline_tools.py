@@ -1,7 +1,8 @@
 import unittest
 
-from agent_pipeline import ToolExecutionError, ToolExecutor, ToolSelectionError
-from core import AgentPresetRuntimeConfig, LLMConfig
+from agent_pipeline import ToolExecutor, ToolSelectionError
+from agent_pipeline.registry import LLMConfig
+from agent_pipeline.resolver import AgentPresetRuntimeConfig
 from models import AgentPreset
 
 
@@ -13,7 +14,7 @@ class ToolExecutorTestCase(unittest.TestCase):
             name="default assistant",
             description="General customer service preset",
             prompt="Help the customer politely",
-            intelevel=2,
+            llm_level=2,
             tools=tool_names,
         )
         return AgentPresetRuntimeConfig(
@@ -60,14 +61,16 @@ class ToolExecutorTestCase(unittest.TestCase):
         with self.assertRaises(ToolSelectionError):
             ToolExecutor().execute(runtime, "missing", {})
 
-    def test_execute_tool_wraps_callable_errors(self) -> None:
+    def test_execute_tool_returns_error_result_on_callable_failure(self) -> None:
         def broken() -> None:
             raise RuntimeError("boom")
 
         runtime = self._build_runtime(["broken"], [broken])
 
-        with self.assertRaises(ToolExecutionError):
-            ToolExecutor().execute(runtime, "broken", {})
+        result = ToolExecutor().execute(runtime, "broken", {})
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "boom")
 
 
 if __name__ == "__main__":

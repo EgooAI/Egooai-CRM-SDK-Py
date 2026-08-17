@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Optional
 
-from core.agent_preset_resolver import AgentPresetRuntimeConfig
+from agent_pipeline.resolver import AgentPresetRuntimeConfig
 from models.agent_preset import AgentPreset
+
+
+class AgentPipelineResultStatus(str, Enum):
+    COMPLETED = "completed"
+    CONTEXT_LIMITED = "context_limited"
+    TOOL_ROUNDS_LIMITED = "tool_rounds_limited"
 
 
 @dataclass(frozen=True)
@@ -33,7 +39,6 @@ class LLMToolSchema:
 class LLMRequest:
     system_prompt: str
     user_input: str
-    tool_names: list[str]
     tool_prompt: str
     tool_schemas: list[LLMToolSchema] = field(default_factory=list)
     tool_results: list["ToolExecutionResult"] = field(default_factory=list)
@@ -58,7 +63,7 @@ class ToolExecutionResult:
 
 @dataclass(frozen=True)
 class AgentPipelineResult:
-    status: str
+    status: AgentPipelineResultStatus
     runtime: AgentPresetRuntimeConfig
     output_text: str
     iterations: int

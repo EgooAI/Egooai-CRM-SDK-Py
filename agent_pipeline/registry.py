@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any, Optional
 
+from models.agent_preset import LLM_MAX_LEVEL
+
 
 @dataclass(frozen=True)
 class LLMConfig:
@@ -55,8 +57,8 @@ class LLMRegistry:
 
     @staticmethod
     def _validate_level(level: int) -> None:
-        if not 0 <= level <= 4:
-            raise ValueError("LLM level must be between 0 and 4")
+        if not 0 <= level <= LLM_MAX_LEVEL:
+            raise ValueError(f"LLM level must be between 0 and {LLM_MAX_LEVEL}")
 
     def register(self, level: int, config: LLMConfig) -> None:
         self._validate_level(level)

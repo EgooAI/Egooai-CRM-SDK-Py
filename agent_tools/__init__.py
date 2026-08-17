@@ -6,9 +6,7 @@ from .math_tools import (
 
 def register_builtin_tools() -> list[str]:
     """Register all built-in tools shipped with the SDK."""
-    registered: list[str] = []
-    registered.extend(register_math_tools())
-    return registered
+    return register_math_tools()
 
 
 __all__ = [

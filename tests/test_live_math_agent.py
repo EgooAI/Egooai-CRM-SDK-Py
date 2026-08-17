@@ -1,9 +1,11 @@
 import os
 import unittest
 
-from agent_pipeline import AgentPipeline, AgentPipelineInput, OpenAICompatibleLLMClient, register_math_tools
+from agent_pipeline import AgentPipeline, AgentPipelineInput, OpenAICompatibleLLMClient
 from agent_pipeline.llm_api import register_default_llms
-from core import AgentPresetManager, llm_registry, tool_registry
+from agent_pipeline.registry import llm_registry, tool_registry
+from agent_tools import register_math_tools
+from core import AgentPresetManager
 from models import AgentPreset
 
 EXPECTED_MATH_TOOLS = [
@@ -13,7 +15,7 @@ EXPECTED_MATH_TOOLS = [
 
 def find_live_math_agent(manager: AgentPresetManager) -> AgentPreset:
     for preset in manager.list_agent_preset():
-        if preset.intelevel == 2 and preset.tools == EXPECTED_MATH_TOOLS:
+        if preset.llm_level == 2 and preset.tools == EXPECTED_MATH_TOOLS:
             return preset
     raise AssertionError(
         "No math agent preset was found in the database. "

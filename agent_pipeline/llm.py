@@ -6,8 +6,8 @@ from typing import Any, Protocol
 from urllib import error, request
 
 from agent_pipeline.errors import LLMInvocationError
+from agent_pipeline.registry import LLMConfig
 from agent_pipeline.types import LLMRequest, LLMResponse, LLMToolCall
-from core import LLMConfig
 
 
 class LLMClient(Protocol):
@@ -108,7 +108,6 @@ class OpenAICompatibleLLMClient:
             messages.append(
                 {
                     "role": "assistant",
-                    "content": "",
                     "tool_calls": [
                         {
                             "id": tool_call_id,
@@ -198,6 +197,8 @@ class OpenAICompatibleLLMClient:
 
         tool_calls = message.get("tool_calls")
         if isinstance(tool_calls, list) and tool_calls:
+            if len(tool_calls) > 1:
+                raise LLMInvocationError("Multiple tool calls in a single response are not supported")
             first_tool_call = tool_calls[0]
             if not isinstance(first_tool_call, dict):
                 raise LLMInvocationError("LLM API tool call must be an object")

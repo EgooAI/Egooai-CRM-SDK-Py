@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core import register_tool
+from agent_pipeline.registry import register_tool
 
 
 def calculate(operation: str, a: float, b: float) -> float:

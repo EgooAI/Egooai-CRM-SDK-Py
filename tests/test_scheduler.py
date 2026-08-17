@@ -131,12 +131,12 @@ class ThreadPoolSchedulerTestCase(unittest.TestCase):
             self.scheduler.submit_manager_call(
                 self.agent_preset_manager,
                 self.agent_preset_manager.upsert_agent_preset,
-                AgentPreset(
+AgentPreset(
                     apid="default-assistant",
                     name="default assistant",
                     description="General customer service preset",
                     prompt="Help the customer politely",
-                    intelevel=2,
+                    llm_level=2,
                     tools=[],
                 ),
             )

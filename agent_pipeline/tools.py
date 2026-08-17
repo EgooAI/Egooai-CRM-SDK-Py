@@ -4,9 +4,9 @@ import inspect
 from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
-from agent_pipeline.errors import ToolExecutionError, ToolSelectionError
+from agent_pipeline.errors import ToolSelectionError
+from agent_pipeline.resolver import AgentPresetRuntimeConfig
 from agent_pipeline.types import ToolExecutionResult
-from core.agent_preset_resolver import AgentPresetRuntimeConfig
 
 
 class ToolExecutor:
@@ -66,11 +66,8 @@ class ToolExecutor:
         normalized_input = tool_input or {}
 
         try:
-            if isinstance(normalized_input, dict):
-                content = tool(**self._normalize_keyword_input(tool, normalized_input))
-            else:
-                content = tool(normalized_input)
-        except Exception as exc:  # pragma: no cover - wrapped for callers
-            raise ToolExecutionError(f"Tool {tool_name} execution failed") from exc
+            content = tool(**self._normalize_keyword_input(tool, normalized_input))
+        except Exception as exc:
+            return ToolExecutionResult(name=tool_name, ok=False, error=str(exc))
 
         return ToolExecutionResult(name=tool_name, ok=True, content=content)

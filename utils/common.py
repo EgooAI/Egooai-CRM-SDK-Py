@@ -15,8 +15,6 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlmodel import SQLModel, create_engine
 
-from utils.migration import run_migrations, run_preflight_renames
-
 K = TypeVar("K")
 V = TypeVar("V")
 
@@ -106,7 +104,7 @@ def _attach_shared_dispose(engine: Engine, database_path: Path) -> Engine:
 
 
 def _create_shared_engine(database_path: Path) -> Engine:
-    """Create a configured SQLite engine, run pre-flight renames and migrations."""
+    """Create a configured SQLite engine and build the schema."""
     engine = create_engine(
         f"sqlite:///{database_path.as_posix()}",
         connect_args={"check_same_thread": False, "timeout": 30},
@@ -118,9 +116,7 @@ def _create_shared_engine(database_path: Path) -> Engine:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    run_preflight_renames(engine)
     SQLModel.metadata.create_all(engine)
-    run_migrations(engine)
     return _attach_shared_dispose(engine, database_path)
 
 
@@ -137,7 +133,6 @@ def bootstrap_engine(database_path: Optional[Path | str] = None):
         resolved_database_path,
         lambda: _create_shared_engine(resolved_database_path),
     )
-    _DATABASE_LOCKS.get_or_create(resolved_database_path, RLock)
     return resolved_database_path, engine
 
 
