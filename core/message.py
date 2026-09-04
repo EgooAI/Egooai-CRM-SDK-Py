@@ -1,95 +1,35 @@
-from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import inspect
-from sqlmodel import Session, select
+from models import Message
 
-from models.message import Message
-from utils.common import bootstrap_engine, get_database_lock
+from .base import BaseManager
 
 
-class MessageManager:
-    def __init__(self, database_path: Optional[Path | str] = None) -> None:
-        self.database_path, self.engine = bootstrap_engine(database_path)
-        self._lock = get_database_lock(self.database_path)
+class MessageManager(BaseManager[Message]):
+    """负责 Message 表的连接初始化与增删改查操作。"""
 
-    @staticmethod
-    def _payload_tuple(message: Message) -> tuple[object, ...]:
-        return (
-            message.sid,
-            message.sender,
-            message.read,
-            message.content,
-            message.type,
-            message.created_at,
-        )
-
-    @staticmethod
-    def _apply_message_updates(current_message: Message, message: Message) -> None:
-        current_message.sid = message.sid
-        current_message.sender = message.sender
-        current_message.read = message.read
-        current_message.content = message.content
-        current_message.type = message.type
-        current_message.created_at = message.created_at
+    model = Message
+    pk_field = "external_mid"
+    editable_fields = ("sid", "sender", "read", "content", "type", "created_at")
+    pk_is_auto = False
 
     def add_message(self, message: Message) -> None:
-        with self._lock:
-            with Session(self.engine) as session:
-                session.add(message)
-                session.commit()
-                session.refresh(message)
+        self._add(message)
 
     def upsert_message(self, message: Message) -> None:
-        with self._lock:
-            with Session(self.engine) as session:
-                current_message = session.get(Message, message.external_mid)
-                if current_message is None:
-                    session.add(message)
-                    session.commit()
-                    session.refresh(message)
-                    return
-
-                if self._payload_tuple(current_message) == self._payload_tuple(message):
-                    return
-
-                self._apply_message_updates(current_message, message)
-                session.add(current_message)
-                session.commit()
-                session.refresh(current_message)
+        self._upsert(message)
 
     def delete_message(self, external_mid: str) -> None:
-        with self._lock:
-            with Session(self.engine) as session:
-                current_message = session.get(Message, external_mid)
-                if current_message is None:
-                    return
-
-                session.delete(current_message)
-                session.commit()
+        self._delete(external_mid)
 
     def edit_message(self, external_mid: str, message: Message) -> None:
-        with self._lock:
-            with Session(self.engine) as session:
-                current_message = session.get(Message, external_mid)
-                if current_message is None:
-                    raise ValueError(f"Message {external_mid} not found")
-
-                self._apply_message_updates(current_message, message)
-
-                session.add(current_message)
-                session.commit()
-                session.refresh(current_message)
+        self._edit(external_mid, message)
 
     def get_message(self, external_mid: str) -> Optional[Message]:
-        with Session(self.engine) as session:
-            return session.get(Message, external_mid)
+        return self._get(external_mid)
 
     def list_message(self) -> list[Message]:
-        with Session(self.engine) as session:
-            external_mid_column = inspect(Message).columns.external_mid
-            statement = select(Message).order_by(external_mid_column)
-            return list(session.exec(statement).all())
+        return self._list()
 
 
 __all__ = ["MessageManager"]

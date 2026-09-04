@@ -1,7 +1,7 @@
 [project]
 name = "egooai-crm-sdk-py"
 version = "0.1.0"
-description = "CRM SDK prototype with SQLModel-based customer management."
+description = "Local CRM SDK with SQLModel-based data layer and an agent tool-calling pipeline."
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [

@@ -11,7 +11,7 @@ from agent_pipeline.resolver import (
     require_agent_preset_by_apid,
     resolve_agent_preset,
 )
-from agent_pipeline.tools import ToolExecutor
+from agent_pipeline.tools import ToolExecutor, _unwrap_annotation
 from agent_pipeline.types import (
     AgentPipelineInput,
     AgentPipelineResult,
@@ -54,7 +54,7 @@ class AgentPipeline:
 
     @staticmethod
     def _annotation_to_json_type(annotation: object) -> str:
-        normalized = ToolExecutor._unwrap_annotation(annotation)
+        normalized = _unwrap_annotation(annotation)
         origin = get_origin(normalized)
         if origin is dict:
             return "object"

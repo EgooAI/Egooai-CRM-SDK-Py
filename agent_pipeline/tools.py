@@ -9,24 +9,24 @@ from agent_pipeline.resolver import AgentPresetRuntimeConfig
 from agent_pipeline.types import ToolExecutionResult
 
 
+def _unwrap_annotation(annotation: object) -> object:
+    if annotation is inspect._empty:
+        return annotation
+
+    origin = get_origin(annotation)
+    if origin in (UnionType, Union):
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(args) == 1:
+            return args[0]
+    return annotation
+
+
 class ToolExecutor:
     """Execute a resolved tool with light annotation-based input normalization."""
 
-    @staticmethod
-    def _unwrap_annotation(annotation: object) -> object:
-        if annotation is inspect._empty:
-            return annotation
-
-        origin = get_origin(annotation)
-        if origin in (UnionType, Union):
-            args = [arg for arg in get_args(annotation) if arg is not type(None)]
-            if len(args) == 1:
-                return args[0]
-        return annotation
-
     @classmethod
     def _coerce_value(cls, value: Any, annotation: object) -> Any:
-        normalized_annotation = cls._unwrap_annotation(annotation)
+        normalized_annotation = _unwrap_annotation(annotation)
         if normalized_annotation is inspect._empty or value is None:
             return value
         if normalized_annotation is float and isinstance(value, str):
