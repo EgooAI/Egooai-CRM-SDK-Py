@@ -80,12 +80,23 @@ def utc_now() -> datetime:
 
 
 def resolve_database_path(database_path: Optional[Path | str] = None) -> Path:
-    """解析 sqlite 数据库文件路径；未传入时默认使用 data/crm.sqlite。"""
+    """解析 sqlite 数据库文件路径。
+
+    显式传入的相对路径仍按 CWD 解析（保持调用方契约）；未传入时默认
+    使用 backend/data/crm.sqlite，避免 CWD 一变写错库。
+    """
     if database_path is not None:
         resolved_path = Path(database_path).resolve()
     else:
-        default_path = os.environ.get("MAA_CRM_DB_PATH", "data/crm.sqlite")
-        resolved_path = Path(default_path).resolve()
+        import os
+
+        from backend.app.shared.utils.settings import CRM_DB_RELATIVE_DEFAULT, resolve_backend_root
+
+        default_path = os.environ.get("MAA_CRM_DB_PATH", CRM_DB_RELATIVE_DEFAULT)
+        resolved_path = Path(default_path)
+        if not resolved_path.is_absolute():
+            resolved_path = resolve_backend_root() / resolved_path
+        resolved_path = resolved_path.resolve()
 
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     return resolved_path
