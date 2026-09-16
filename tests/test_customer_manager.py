@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import threading
 import unittest
@@ -13,13 +14,13 @@ from utils import bootstrap_engine, utc_now
 class CustomerManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
         self.temp_path = Path(self.temp_dir.name)
         self.db_path = self.temp_path / "customer.sqlite"
         self.manager = CustomerManager(database_path=self.db_path)
 
     def tearDown(self) -> None:
         self.manager.engine.dispose()
-        self.temp_dir.cleanup()
 
     def _build_customer(self, name: str = "Alice") -> Customer:
         return Customer(
@@ -220,6 +221,8 @@ class CustomerManagerTestCase(unittest.TestCase):
             first_engine.dispose()
 
     def test_bootstrap_engine_reuses_shared_engine_for_resolved_relative_path(self) -> None:
+        self.addCleanup(os.chdir, Path.cwd())
+        os.chdir(self.temp_path)
         relative_path = Path("tests-temp") / "nested" / "customer.sqlite"
 
         first_path, first_engine = bootstrap_engine(relative_path)
@@ -231,15 +234,6 @@ class CustomerManagerTestCase(unittest.TestCase):
             self.assertIs(first_engine, second_engine)
         finally:
             first_engine.dispose()
-            if first_path.exists():
-                first_path.unlink()
-            parent = first_path.parent
-            while parent.name != "Egooai-CRM-SDK-Py" and parent.exists():
-                try:
-                    parent.rmdir()
-                except OSError:
-                    break
-                parent = parent.parent
 
     def test_bootstrap_engine_dispose_rebuilds_shared_engine(self) -> None:
         _, first_engine = bootstrap_engine(self.db_path)
@@ -301,6 +295,8 @@ class CustomerManagerTestCase(unittest.TestCase):
         self.assertEqual(len(self.manager.list_customer()), 1)
 
     def test_bootstrap_engine_resolves_relative_database_path(self) -> None:
+        self.addCleanup(os.chdir, Path.cwd())
+        os.chdir(self.temp_path)
         relative_path = Path("tests-temp") / "nested" / "customer.sqlite"
 
         database_path, engine = bootstrap_engine(relative_path)
@@ -309,15 +305,6 @@ class CustomerManagerTestCase(unittest.TestCase):
             self.assertTrue(database_path.exists())
         finally:
             engine.dispose()
-            if database_path.exists():
-                database_path.unlink()
-            parent = database_path.parent
-            while parent.name != "Egooai-CRM-SDK-Py" and parent.exists():
-                try:
-                    parent.rmdir()
-                except OSError:
-                    break
-                parent = parent.parent
 
     def test_utils_utc_now_is_timezone_aware(self) -> None:
         current = utc_now()
