@@ -36,13 +36,6 @@ class TranslateManagerTestCase(unittest.TestCase):
 
         self.assertIn("translate", tables)
 
-    def test_add_translate_persists_primary_key(self) -> None:
-        translate = self._build_translate()
-
-        self.manager.add_translate(translate)
-
-        self.assertEqual(translate.text_hash, "文本摘要值")
-
     def test_get_translate_returns_inserted_translate(self) -> None:
         translate = self._build_translate()
         self.manager.add_translate(translate)
@@ -113,7 +106,10 @@ class TranslateManagerTestCase(unittest.TestCase):
 
         self.manager.upsert_translate(translate)
 
-        self.assertEqual(translate.text_hash, "hash-upsert")
+        saved_translate = self.manager.get_translate("hash-upsert")
+        self.assertIsNotNone(saved_translate)
+        assert saved_translate is not None
+        self.assertEqual(saved_translate.translation, "hello")
         self.assertEqual(len(self.manager.list_translate()), 1)
 
     def test_upsert_translate_updates_existing_record(self) -> None:
@@ -129,7 +125,7 @@ class TranslateManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_translate.translation, "updated text")
         self.assertEqual(len(self.manager.list_translate()), 1)
 
-    def test_upsert_translate_skips_duplicate_payload(self) -> None:
+    def test_upsert_translate_is_idempotent_for_duplicate_payload(self) -> None:
         translate = self._build_translate()
         self.manager.add_translate(translate)
         duplicate_translate = Translate(text_hash=translate.text_hash, translation=translate.translation)
