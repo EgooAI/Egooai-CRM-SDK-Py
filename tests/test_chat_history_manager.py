@@ -1,4 +1,3 @@
-import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -34,28 +33,11 @@ class ChatHistoryManagerTestCase(unittest.TestCase):
             },
         )
 
-    def test_auto_creates_chat_history_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("chat_history", tables)
-
-    def test_add_chat_history_persists_generated_id(self) -> None:
-        chat_history = self._build_chat_history()
-
-        self.manager.add_chat_history(chat_history)
-
-        self.assertIsNotNone(chat_history.id)
-
     def test_get_chat_history_returns_inserted_record(self) -> None:
         chat_history = self._build_chat_history()
         self.manager.add_chat_history(chat_history)
 
+        self.assertIsNotNone(chat_history.id)
         saved_chat_history = self.manager.get_chat_history(chat_history.id)
 
         self.assertIsNotNone(saved_chat_history)

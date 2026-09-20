@@ -14,7 +14,6 @@ from agent_pipeline import (
 from agent_pipeline.llm import StaticLLMClient
 from agent_pipeline.llm_api import load_default_llm_levels, register_default_llms
 from agent_pipeline.registry import LLMConfig, llm_registry, tool_registry
-from agent_pipeline.resolver import resolve_agent_preset
 from agent_pipeline.types import LLMToolSchema
 from core import AgentPresetManager, LLMApiConfigManager
 from models import AgentPreset, LLMApiConfig
@@ -49,58 +48,33 @@ class LLMApiTestCase(unittest.TestCase):
         finally:
             manager.engine.dispose()
 
-    def test_load_default_llm_levels_registers_levels_zero_through_four(self) -> None:
+    def test_load_default_llm_levels_maps_only_configured_levels(self) -> None:
         with TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "llm_api.sqlite"
-            self._write_configs(db_path, [self._config(level) for level in range(5)])
-
-            levels = load_default_llm_levels(db_path)
-
-            self.assertEqual(sorted(levels.keys()), [0, 1, 2, 3, 4])
-            self.assertEqual(levels[2].model_name, "claude-opus-4-8")
-            self.assertIsNone(levels[2].system_prompt)
-            self.assertEqual(levels[2].context, 12000)
-            self._dispose_shared_engine(db_path)
-
-    def test_load_default_llm_levels_uses_only_configured_levels(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            db_path = Path(temp_dir) / "llm_api.sqlite"
-            self._write_configs(
-                db_path,
-                [
-                    self._config(0),
-                    self._config(4, model_name="claude-sonnet-5"),
-                ],
-            )
-
-            levels = load_default_llm_levels(db_path)
-
-            self.assertEqual(sorted(levels.keys()), [0, 4])
-            self.assertEqual(levels[0].model_name, "claude-opus-4-8")
-            self.assertEqual(levels[4].model_name, "claude-sonnet-5")
-            self._dispose_shared_engine(db_path)
-
-    def test_load_default_llm_levels_maps_optional_fields(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            db_path = Path(temp_dir) / "llm_api.sqlite"
-            self._write_configs(
-                db_path,
-                [
-                    self._config(
-                        2,
-                        system_prompt="You are a careful assistant.",
-                        context=4096,
-                        max_tool_rounds=5,
-                    )
-                ],
-            )
-
-            levels = load_default_llm_levels(db_path)
-
-            self.assertEqual(levels[2].system_prompt, "You are a careful assistant.")
-            self.assertEqual(levels[2].context, 4096)
-            self.assertEqual(levels[2].max_tool_rounds, 5)
-            self._dispose_shared_engine(db_path)
+            for configured_levels in ((0, 1, 2, 3, 4), (0, 4)):
+                with self.subTest(levels=configured_levels):
+                    self._write_configs(db_path, [
+                        self._config(
+                            level, model_name=f"model-{level}",
+                            system_prompt="policy" if level else "",
+                            context=4096, max_tool_rounds=5,
+                        )
+                        for level in configured_levels
+                    ])
+                    try:
+                        levels = load_default_llm_levels(db_path)
+                        self.assertEqual(levels, {
+                            level: LLMConfig(
+                                base_url="https://api.example.com/v1",
+                                api_key="replace-me",
+                                model_name=f"model-{level}",
+                                system_prompt="policy" if level else None,
+                                context=4096, max_tool_rounds=5,
+                            )
+                            for level in configured_levels
+                        })
+                    finally:
+                        self._dispose_shared_engine(db_path)
 
     def test_register_default_llms_is_idempotent(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -128,25 +102,6 @@ class LLMApiTestCase(unittest.TestCase):
 
             self.assertEqual(levels, {})
             self.assertEqual(llm_registry.list(), {})
-            self._dispose_shared_engine(db_path)
-
-    def test_agent_preset_resolver_can_use_database_registrations(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            db_path = Path(temp_dir) / "llm_api.sqlite"
-            self._write_configs(db_path, [self._config(2)])
-            register_default_llms(db_path)
-            agent_preset = AgentPreset(
-                apid="default-assistant",
-                name="default assistant",
-                description="General customer service preset",
-                prompt="Help the customer politely",
-                llm_level=2,
-                tools=[],
-            )
-
-            runtime = resolve_agent_preset(agent_preset)
-
-            self.assertEqual(runtime.llm.model_name, "claude-opus-4-8")
             self._dispose_shared_engine(db_path)
 
     def test_agent_pipeline_can_use_database_registrations(self) -> None:

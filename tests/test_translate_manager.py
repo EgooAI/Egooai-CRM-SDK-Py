@@ -1,4 +1,3 @@
-import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -25,17 +24,6 @@ class TranslateManagerTestCase(unittest.TestCase):
     ) -> Translate:
         return Translate(text_hash=text_hash, translation=translation)
 
-    def test_auto_creates_translate_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("translate", tables)
-
     def test_get_translate_returns_inserted_translate(self) -> None:
         translate = self._build_translate()
         self.manager.add_translate(translate)
@@ -54,8 +42,8 @@ class TranslateManagerTestCase(unittest.TestCase):
         first = self._build_translate(text_hash="a-summary", translation="hello")
         second = self._build_translate(text_hash="b-summary", translation="bye")
 
-        self.manager.add_translate(first)
         self.manager.add_translate(second)
+        self.manager.add_translate(first)
 
         translates = self.manager.list_translate()
 

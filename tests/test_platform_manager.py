@@ -1,4 +1,3 @@
-import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -25,26 +24,6 @@ class PlatformManagerTestCase(unittest.TestCase):
             extra={"region": "cn"},
         )
 
-    def test_auto_creates_platform_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("platform", tables)
-
-    def test_add_platform_persists_record(self) -> None:
-        platform = self._build_platform()
-
-        self.manager.add_platform(platform)
-
-        self.assertEqual(platform.pid, "wechat")
-        self.assertIsNotNone(platform.created_time)
-        self.assertIsNotNone(platform.updated_time)
-
     def test_get_platform_returns_inserted_platform(self) -> None:
         platform = self._build_platform()
         self.manager.add_platform(platform)
@@ -56,6 +35,8 @@ class PlatformManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_platform.pid, "wechat")
         self.assertEqual(saved_platform.name, "WeChat")
         self.assertEqual(saved_platform.extra, {"region": "cn"})
+        self.assertEqual(saved_platform.created_time, platform.created_time)
+        self.assertEqual(saved_platform.updated_time, platform.updated_time)
 
     def test_get_platform_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_platform("missing"))
@@ -68,8 +49,8 @@ class PlatformManagerTestCase(unittest.TestCase):
         )
         second = self._build_platform(pid="wechat")
 
-        self.manager.add_platform(first)
         self.manager.add_platform(second)
+        self.manager.add_platform(first)
 
         platforms = self.manager.list_platform()
 

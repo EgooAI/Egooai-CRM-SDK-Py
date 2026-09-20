@@ -1,4 +1,3 @@
-import sqlite3
 import threading
 import unittest
 from pathlib import Path
@@ -71,30 +70,12 @@ class AccountMappingManagerTestCase(unittest.TestCase):
         self.assertIs(self.manager._lock, self.customer_manager._lock)
         self.assertIs(self.manager._lock, self.platform_manager._lock)
 
-    def test_auto_creates_account_mapping_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("accountmapping", tables)
-
-    def test_add_account_mapping_populates_primary_key(self) -> None:
-        account = self._add_account()
-        account_mapping = self._build_account_mapping(account.aid)
-
-        self.manager.add_account_mapping(account_mapping)
-
-        self.assertIsNotNone(account_mapping.amid)
-
     def test_get_account_mapping_returns_inserted_mapping(self) -> None:
         account = self._add_account()
         account_mapping = self._build_account_mapping(account.aid)
         self.manager.add_account_mapping(account_mapping)
 
+        self.assertIsNotNone(account_mapping.amid)
         saved_account_mapping = self.manager.get_account_mapping(account_mapping.amid)
 
         self.assertIsNotNone(saved_account_mapping)

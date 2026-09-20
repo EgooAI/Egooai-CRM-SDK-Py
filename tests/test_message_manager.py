@@ -1,4 +1,3 @@
-import sqlite3
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -82,33 +81,15 @@ class MessageManagerTestCase(unittest.TestCase):
             created_at=created_at,
         )
 
-    def test_auto_creates_message_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("message", tables)
-
-    def test_add_message_persists_primary_key(self) -> None:
-        account = self._add_account()
-        session_meta = self._add_session_meta()
-        message = self._build_message(sid=session_meta.sid, sender=account.aid)
-
-        self.manager.add_message(message)
-
-        self.assertEqual(message.external_mid, "msg-001")
-
     def test_get_message_returns_inserted_record(self) -> None:
         account = self._add_account()
         session_meta = self._add_session_meta()
-        message = self._build_message(sid=session_meta.sid, sender=account.aid)
+        created_at = datetime(2026, 7, 1, 12, 30, 0, tzinfo=timezone.utc)
+        message = self._build_message(sid=session_meta.sid, sender=account.aid, created_at=created_at)
         self.manager.add_message(message)
 
-        saved_message = self.manager.get_message(message.external_mid)
+        self.assertEqual(message.external_mid, "msg-001")
+        saved_message = self.manager.get_message("msg-001")
 
         self.assertIsNotNone(saved_message)
         assert saved_message is not None
@@ -117,22 +98,6 @@ class MessageManagerTestCase(unittest.TestCase):
         self.assertFalse(saved_message.read)
         self.assertEqual(saved_message.content, {"text": "hello"})
         self.assertEqual(saved_message.type, "text")
-
-    def test_message_persists_created_at(self) -> None:
-        account = self._add_account()
-        session_meta = self._add_session_meta()
-        created_at = datetime(2026, 7, 1, 12, 30, 0, tzinfo=timezone.utc)
-        message = self._build_message(
-            sid=session_meta.sid,
-            sender=account.aid,
-            created_at=created_at,
-        )
-
-        self.manager.add_message(message)
-        saved_message = self.manager.get_message(message.external_mid)
-
-        self.assertIsNotNone(saved_message)
-        assert saved_message is not None
         self.assertEqual(saved_message.created_at, created_at.replace(tzinfo=None))
 
     def test_get_message_returns_none_when_missing(self) -> None:
@@ -191,8 +156,8 @@ class MessageManagerTestCase(unittest.TestCase):
             type="image",
         )
 
-        self.manager.add_message(first)
         self.manager.add_message(second)
+        self.manager.add_message(first)
 
         messages = self.manager.list_message()
 

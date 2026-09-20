@@ -1,4 +1,3 @@
-import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -17,15 +16,6 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.manager.engine.dispose()
         self.temp_dir.cleanup()
-
-    def test_auto_creates_llm_api_config_table(self) -> None:
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("llm_api_config", tables)
 
     def test_to_payload_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.to_payload())

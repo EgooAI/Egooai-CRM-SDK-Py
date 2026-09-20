@@ -1,4 +1,3 @@
-import sqlite3
 import threading
 import unittest
 from pathlib import Path
@@ -39,29 +38,12 @@ class AgentPresetManagerTestCase(unittest.TestCase):
             payload["tools"] = tools
         return AgentPreset(**payload)
 
-    def test_auto_creates_agent_preset_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("agentpreset", tables)
-
-    def test_add_agent_preset_keeps_external_primary_key(self) -> None:
-        agent_preset = self._build_agent_preset()
-
-        self.manager.add_agent_preset(agent_preset)
-
-        self.assertEqual(agent_preset.apid, "default-assistant")
-
     def test_get_agent_preset_returns_inserted_record(self) -> None:
         agent_preset = self._build_agent_preset(tools=["web_search", "calculator"])
         self.manager.add_agent_preset(agent_preset)
 
-        saved_agent_preset = self.manager.get_agent_preset(agent_preset.apid)
+        self.assertEqual(agent_preset.apid, "default-assistant")
+        saved_agent_preset = self.manager.get_agent_preset("default-assistant")
 
         self.assertIsNotNone(saved_agent_preset)
         assert saved_agent_preset is not None
@@ -88,8 +70,8 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         first = self._build_agent_preset(apid="preset-a", name="preset-a", llm_level=1)
         second = self._build_agent_preset(apid="preset-b", name="preset-b", llm_level=3, tools=["browser"])
 
-        self.manager.add_agent_preset(first)
         self.manager.add_agent_preset(second)
+        self.manager.add_agent_preset(first)
 
         agent_presets = self.manager.list_agent_preset()
 
@@ -140,17 +122,11 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         self.manager.delete_agent_preset("missing")
         self.assertEqual(self.manager.list_agent_preset(), [])
 
-    def test_add_agent_preset_rejects_llm_level_below_zero(self) -> None:
-        agent_preset = self._build_agent_preset(llm_level=-1)
-
-        with self.assertRaises(ValueError):
-            self.manager.add_agent_preset(agent_preset)
-
-    def test_add_agent_preset_rejects_llm_level_above_four(self) -> None:
-        agent_preset = self._build_agent_preset(llm_level=5)
-
-        with self.assertRaises(ValueError):
-            self.manager.add_agent_preset(agent_preset)
+    def test_add_agent_preset_rejects_out_of_range_llm_level(self) -> None:
+        for level in (-1, 5):
+            with self.subTest(level=level):
+                with self.assertRaises(ValueError):
+                    self.manager.add_agent_preset(self._build_agent_preset(llm_level=level))
 
     def test_edit_agent_preset_rejects_invalid_llm_level(self) -> None:
         agent_preset = self._build_agent_preset()
@@ -165,7 +141,8 @@ class AgentPresetManagerTestCase(unittest.TestCase):
 
         self.manager.upsert_agent_preset(agent_preset)
 
-        self.assertIsNotNone(agent_preset.apid)
+        self.assertEqual(agent_preset.apid, "preset-upsert")
+        self.assertEqual(self.manager.get_agent_preset("preset-upsert").name, "preset-upsert")
         self.assertEqual(len(self.manager.list_agent_preset()), 1)
 
     def test_upsert_agent_preset_updates_existing_fields(self) -> None:
@@ -197,20 +174,6 @@ class AgentPresetManagerTestCase(unittest.TestCase):
 
         self.assertEqual(len(self.manager.list_agent_preset()), 1)
         self.assertEqual(duplicate_agent_preset.apid, agent_preset.apid)
-
-    def test_upsert_agent_preset_inserts_new_external_primary_key(self) -> None:
-        missing_agent_preset = AgentPreset(
-            apid="ghost",
-            name="ghost",
-            description="missing preset",
-            prompt="ghost prompt",
-            llm_level=1,
-            tools=[],
-        )
-
-        self.manager.upsert_agent_preset(missing_agent_preset)
-
-        self.assertIsNotNone(self.manager.get_agent_preset("ghost"))
 
     def test_upsert_agent_preset_rejects_invalid_llm_level(self) -> None:
         invalid_agent_preset = self._build_agent_preset(llm_level=5)

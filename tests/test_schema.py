@@ -43,25 +43,17 @@ class SchemaTestCase(unittest.TestCase):
     def test_account_composite_index(self) -> None:
         self.assertIn("idx_account_cid_pid_account", self._index_names("account"))
 
-    def test_chat_history_table_exists(self) -> None:
+    def test_bootstrap_preserves_sdk_table_names_without_schema_version_table(self) -> None:
         conn = sqlite3.connect(self.db_path)
         try:
-            row = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history'"
-            ).fetchone()
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         finally:
             conn.close()
-        self.assertIsNotNone(row)
-
-    def test_no_schema_version_table(self) -> None:
-        conn = sqlite3.connect(self.db_path)
-        try:
-            row = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
-            ).fetchone()
-        finally:
-            conn.close()
-        self.assertIsNone(row)
+        self.assertTrue({
+            "account", "accountmapping", "agentpreset", "chat_history", "customer",
+            "llm_api_config", "message", "meta", "platform", "session_meta", "translate",
+        }.issubset(tables))
+        self.assertNotIn("schema_version", tables)
 
 
 if __name__ == "__main__":

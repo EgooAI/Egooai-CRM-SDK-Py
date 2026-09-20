@@ -1,4 +1,3 @@
-import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,28 +20,11 @@ class SessionMetaManagerTestCase(unittest.TestCase):
     def _build_session_meta(self, name: str = "session-a", key: str | None = None) -> SessionMeta:
         return SessionMeta(key=key if key is not None else name, name=name, participants=[1, 2])
 
-    def test_auto_creates_session_meta_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("session_meta", tables)
-
-    def test_add_session_meta_populates_primary_key(self) -> None:
-        session_meta = self._build_session_meta()
-
-        self.manager.add_session_meta(session_meta)
-
-        self.assertIsNotNone(session_meta.sid)
-
     def test_get_session_meta_returns_inserted_record(self) -> None:
         session_meta = self._build_session_meta()
         self.manager.add_session_meta(session_meta)
 
+        self.assertIsNotNone(session_meta.sid)
         saved_session_meta = self.manager.get_session_meta(session_meta.sid)
 
         self.assertIsNotNone(saved_session_meta)

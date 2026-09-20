@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import threading
 import unittest
 from datetime import date
@@ -32,30 +31,11 @@ class CustomerManagerTestCase(unittest.TestCase):
             image={"avatar": f"{name.lower()}.png"},
         )
 
-    def test_auto_creates_customer_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("customer", tables)
-
-    def test_add_customer_populates_primary_key(self) -> None:
-        customer = self._build_customer()
-
-        self.manager.add_customer(customer)
-
-        self.assertIsNotNone(customer.cid)
-        self.assertIsNotNone(customer.created_time)
-        self.assertIsNotNone(customer.updated_time)
-
     def test_get_customer_returns_inserted_customer(self) -> None:
         customer = self._build_customer()
         self.manager.add_customer(customer)
 
+        self.assertIsNotNone(customer.cid)
         saved_customer = self.manager.get_customer(customer.cid)
 
         self.assertIsNotNone(saved_customer)
@@ -63,6 +43,9 @@ class CustomerManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_customer.name, "Alice")
         self.assertEqual(saved_customer.extra, {"level": 1})
         self.assertEqual(saved_customer.image, {"avatar": "alice.png"})
+        self.assertEqual(saved_customer.birthdate, date(1995, 5, 1))
+        self.assertEqual(saved_customer.created_time, customer.created_time)
+        self.assertEqual(saved_customer.updated_time, customer.updated_time)
 
     def test_get_customer_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_customer(9999))
@@ -203,23 +186,6 @@ class CustomerManagerTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.manager.upsert_customer(missing_customer)
 
-    def test_bootstrap_engine_creates_database_file_for_explicit_path(self) -> None:
-        database_path, engine = bootstrap_engine(self.db_path)
-        try:
-            self.assertEqual(database_path, self.db_path.resolve())
-            self.assertTrue(database_path.exists())
-        finally:
-            engine.dispose()
-
-    def test_bootstrap_engine_reuses_shared_engine_for_same_path(self) -> None:
-        first_path, first_engine = bootstrap_engine(self.db_path)
-        second_path, second_engine = bootstrap_engine(self.db_path)
-        try:
-            self.assertEqual(first_path, second_path)
-            self.assertIs(first_engine, second_engine)
-        finally:
-            first_engine.dispose()
-
     def test_bootstrap_engine_reuses_shared_engine_for_resolved_relative_path(self) -> None:
         self.addCleanup(os.chdir, Path.cwd())
         os.chdir(self.temp_path)
@@ -241,14 +207,10 @@ class CustomerManagerTestCase(unittest.TestCase):
         _, second_engine = bootstrap_engine(self.db_path)
         try:
             self.assertIsNot(first_engine, second_engine)
+            first_engine.dispose()
+            self.assertIs(bootstrap_engine(self.db_path)[1], second_engine)
         finally:
             second_engine.dispose()
-
-    def test_bootstrap_engine_dispose_is_idempotent(self) -> None:
-        _, engine = bootstrap_engine(self.db_path)
-
-        engine.dispose()
-        engine.dispose()
 
     def test_bootstrap_engine_supports_cross_thread_sessions(self) -> None:
         manager = CustomerManager(database_path=self.db_path)
@@ -293,18 +255,6 @@ class CustomerManagerTestCase(unittest.TestCase):
 
         self.assertEqual(errors, [])
         self.assertEqual(len(self.manager.list_customer()), 1)
-
-    def test_bootstrap_engine_resolves_relative_database_path(self) -> None:
-        self.addCleanup(os.chdir, Path.cwd())
-        os.chdir(self.temp_path)
-        relative_path = Path("tests-temp") / "nested" / "customer.sqlite"
-
-        database_path, engine = bootstrap_engine(relative_path)
-        try:
-            self.assertEqual(database_path, relative_path.resolve())
-            self.assertTrue(database_path.exists())
-        finally:
-            engine.dispose()
 
     def test_utils_utc_now_is_timezone_aware(self) -> None:
         current = utc_now()

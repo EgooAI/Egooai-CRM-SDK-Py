@@ -1,4 +1,3 @@
-import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -51,30 +50,11 @@ class AccountManagerTestCase(unittest.TestCase):
         self.assertIs(self.manager.engine, self.customer_manager.engine)
         self.assertIs(self.manager.engine, self.platform_manager.engine)
 
-    def test_auto_creates_account_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("account", tables)
-
-    def test_add_account_populates_primary_key(self) -> None:
-        account = self._build_account()
-
-        self.manager.add_account(account)
-
-        self.assertIsNotNone(account.aid)
-        self.assertIsNotNone(account.created_time)
-        self.assertIsNotNone(account.updated_time)
-
     def test_get_account_returns_inserted_account(self) -> None:
         account = self._build_account()
         self.manager.add_account(account)
 
+        self.assertIsNotNone(account.aid)
         saved_account = self.manager.get_account(account.aid)
 
         self.assertIsNotNone(saved_account)
@@ -83,6 +63,8 @@ class AccountManagerTestCase(unittest.TestCase):
         self.assertEqual(saved_account.nickname, "Alice")
         self.assertEqual(saved_account.sids, [1, 2])
         self.assertEqual(saved_account.extra, {"level": 1})
+        self.assertEqual(saved_account.created_time, account.created_time)
+        self.assertEqual(saved_account.updated_time, account.updated_time)
 
     def test_get_account_returns_none_when_missing(self) -> None:
         self.assertIsNone(self.manager.get_account(9999))

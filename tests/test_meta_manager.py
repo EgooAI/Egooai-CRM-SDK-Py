@@ -28,27 +28,11 @@ class MetaManagerTestCase(unittest.TestCase):
         finally:
             connection.close()
 
-    def test_auto_creates_meta_table(self) -> None:
-        self.assertTrue(self.db_path.exists())
-
-        connection = sqlite3.connect(self.db_path)
-        try:
-            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        finally:
-            connection.close()
-
-        self.assertIn("meta", tables)
-
     def test_get_version_returns_default_when_row_missing(self) -> None:
         version = self.manager.get_version()
 
         self.assertEqual(version, "1.0.0")
         self.assertEqual(self._count_rows(), 1)
-
-    def test_update_version_persists_new_value(self) -> None:
-        self.manager.update_version("1.2.3")
-
-        self.assertEqual(self.manager.get_version(), "1.2.3")
 
     def test_update_version_creates_singleton_row_when_missing(self) -> None:
         self.manager.update_version("2.0.0")
@@ -64,40 +48,17 @@ class MetaManagerTestCase(unittest.TestCase):
         self.assertEqual(self.manager.get_version(), "1.0.2")
         self.assertEqual(self._count_rows(), 1)
 
-    def test_upsert_meta_inserts_when_key_missing(self) -> None:
-        meta = Meta(key="build", value="42")
-
-        self.manager.upsert_meta(meta)
-
-        self.assertEqual(meta.key, "build")
-        self.assertEqual(self._count_rows(), 1)
-
-    def test_upsert_meta_updates_existing_key_without_creating_duplicate(self) -> None:
-        first = Meta(key="build", value="42")
-        self.manager.upsert_meta(first)
-        second = Meta(key="build", value="43")
-
-        self.manager.upsert_meta(second)
-
-        self.assertEqual(self._count_rows(), 1)
-        connection = sqlite3.connect(self.db_path)
-        try:
-            row = connection.execute("SELECT value FROM meta WHERE key = 'build'").fetchone()
-        finally:
-            connection.close()
-        assert row is not None
-        self.assertEqual(row[0], "43")
-
-    def test_upsert_meta_skips_duplicate_value(self) -> None:
-        meta = Meta(key="build", value="42")
-        self.manager.upsert_meta(meta)
-        duplicate_meta = Meta(key="build", value="42")
-
-        self.manager.upsert_meta(duplicate_meta)
-
-        self.assertEqual(self._count_rows(), 1)
-        self.assertEqual(duplicate_meta.key, "build")
-        self.assertEqual(duplicate_meta.value, "42")
+    def test_upsert_meta_inserts_updates_and_deduplicates_key(self) -> None:
+        for value in ("42", "43", "43"):
+            with self.subTest(value=value):
+                self.manager.upsert_meta(Meta(key="build", value=value))
+                self.assertEqual(self._count_rows(), 1)
+                connection = sqlite3.connect(self.db_path)
+                try:
+                    rows = connection.execute("SELECT key, value FROM meta").fetchall()
+                finally:
+                    connection.close()
+                self.assertEqual(rows, [("build", value)])
 
     def test_concurrent_get_version_creates_singleton_row_once(self) -> None:
         results: list[str] = []

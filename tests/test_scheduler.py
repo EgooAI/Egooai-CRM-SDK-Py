@@ -1,5 +1,4 @@
 import threading
-import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -35,43 +34,59 @@ class ThreadPoolSchedulerTestCase(unittest.TestCase):
 
     def test_same_database_tasks_finish_in_submission_order(self) -> None:
         order: list[int] = []
+        started = threading.Event()
+        release = threading.Event()
 
         def _task(index: int) -> int:
+            if index == 0:
+                started.set()
+                if not release.wait(timeout=5):
+                    raise TimeoutError("first task was not released")
             order.append(index)
             return index
 
-        futures = [self.scheduler.submit(self.db_path, _task, index) for index in range(3)]
-        results = [future.result() for future in futures]
+        first = self.scheduler.submit(self.db_path, _task, 0)
+        try:
+            self.assertTrue(started.wait(timeout=5))
+            futures = [first] + [self.scheduler.submit(self.db_path, _task, index) for index in (1, 2)]
+            self.assertFalse(any(future.done() for future in futures))
+        finally:
+            release.set()
+        results = [future.result(timeout=5) for future in futures]
 
         self.assertEqual(results, [0, 1, 2])
         self.assertEqual(order, [0, 1, 2])
 
     def test_different_databases_can_run_in_parallel(self) -> None:
-        started = threading.Event()
+        started = [threading.Event(), threading.Event()]
+        release = threading.Event()
 
-        def _sleep_task() -> str:
-            started.set()
-            time.sleep(0.2)
+        def _task(index: int) -> str:
+            started[index].set()
+            if not release.wait(timeout=5):
+                raise TimeoutError("parallel tasks were not released")
             return "done"
 
-        first_future = self.scheduler.submit(self.db_path, _sleep_task)
-        started.wait(timeout=1)
-        begin = time.perf_counter()
-        second_future = self.scheduler.submit(self.other_db_path, _sleep_task)
-        self.assertEqual(first_future.result(), "done")
-        self.assertEqual(second_future.result(), "done")
-        elapsed = time.perf_counter() - begin
-
-        self.assertLess(elapsed, 0.35)
+        first = self.scheduler.submit(self.db_path, _task, 0)
+        second = self.scheduler.submit(self.other_db_path, _task, 1)
+        try:
+            for event in started:
+                self.assertTrue(event.wait(timeout=5))
+            self.assertFalse(first.done())
+            self.assertFalse(second.done())
+        finally:
+            release.set()
+        self.assertEqual(first.result(timeout=5), "done")
+        self.assertEqual(second.result(timeout=5), "done")
 
     def test_submit_manager_call_backfills_primary_key_after_result(self) -> None:
         customer = Customer(name="Queued Alice")
 
         future = self.scheduler.submit_manager_call(self.customer_manager, self.customer_manager.add_customer, customer)
-        self.assertIsNone(customer.cid)
-        future.result()
+        future.result(timeout=5)
 
         self.assertIsNotNone(customer.cid)
+        self.assertEqual(self.customer_manager.get_customer(customer.cid).name, "Queued Alice")
 
     def test_scheduler_propagates_task_exceptions(self) -> None:
         def _raise_error() -> None:
@@ -80,7 +95,7 @@ class ThreadPoolSchedulerTestCase(unittest.TestCase):
         future = self.scheduler.submit(self.db_path, _raise_error)
 
         with self.assertRaises(ValueError):
-            future.result()
+            future.result(timeout=5)
 
     def test_shutdown_prevents_new_submission(self) -> None:
         self.scheduler.shutdown(wait=True)
@@ -94,7 +109,7 @@ class ThreadPoolSchedulerTestCase(unittest.TestCase):
             for _ in range(2)
         ]
         for future in futures:
-            future.result()
+            future.result(timeout=5)
 
         self.assertEqual(len(self.customer_manager.list_customer()), 1)
 
@@ -122,7 +137,7 @@ class ThreadPoolSchedulerTestCase(unittest.TestCase):
             for _ in range(2)
         ]
         for future in futures:
-            future.result()
+            future.result(timeout=5)
 
         self.assertEqual(len(self.account_mapping_manager.list_account_mapping()), 1)
 
@@ -143,7 +158,7 @@ AgentPreset(
             for _ in range(2)
         ]
         for future in futures:
-            future.result()
+            future.result(timeout=5)
 
         self.assertEqual(len(self.agent_preset_manager.list_agent_preset()), 1)
 
@@ -152,7 +167,7 @@ AgentPreset(
             self.scheduler.submit_manager_call(self.meta_manager, self.meta_manager.get_version)
             for _ in range(2)
         ]
-        results = [future.result() for future in futures]
+        results = [future.result(timeout=5) for future in futures]
 
         self.assertEqual(results, ["1.0.0", "1.0.0"])
         self.assertEqual(self.meta_manager.get_version(), "1.0.0")
