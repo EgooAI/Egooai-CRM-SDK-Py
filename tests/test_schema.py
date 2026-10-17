@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 import models  # noqa: F401  (register tables on SQLModel.metadata)
+from core import AgentPresetManager
 from utils.common import bootstrap_engine
 
 
@@ -50,10 +51,38 @@ class SchemaTestCase(unittest.TestCase):
         finally:
             conn.close()
         self.assertTrue({
-            "account", "accountmapping", "agentpreset", "chat_history", "customer",
+            "account", "accountmapping", "agentpreset", "agent_preset_revision", "chat_history", "customer",
             "llm_api_config", "message", "meta", "platform", "session_meta", "translate",
         }.issubset(tables))
         self.assertNotIn("schema_version", tables)
+
+    def test_bootstrap_adds_enabled_column_to_legacy_agent_preset(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy.sqlite"
+        conn = sqlite3.connect(legacy_path)
+        try:
+            conn.execute(
+                "CREATE TABLE agentpreset (apid TEXT PRIMARY KEY, name TEXT, description TEXT, "
+                "prompt TEXT, llm_level INTEGER, tools JSON)"
+            )
+            conn.execute(
+                "INSERT INTO agentpreset VALUES ('agent-legacy', 'A', 'D', 'P', 1, '[\"calculator\"]')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        _, engine = bootstrap_engine(legacy_path)
+        try:
+            manager = AgentPresetManager(database_path=legacy_path)
+            preset = manager.get_agent_preset("agent-legacy")
+            self.assertIsNotNone(preset)
+            assert preset is not None
+            self.assertTrue(preset.enabled)
+            preset.enabled = False
+            manager.upsert_agent_preset(preset)
+            self.assertFalse(manager.get_agent_preset("agent-legacy").enabled)
+        finally:
+            engine.dispose()
 
 
 if __name__ == "__main__":

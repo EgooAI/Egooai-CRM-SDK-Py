@@ -1,6 +1,7 @@
 from .account import Account
 from .account_mapping import AccountMapping
 from .agent_preset import AgentPreset
+from .agent_preset_revision import AgentPresetRevision
 from .chat_history import ChatHistory
 from .customer import Customer
 from .llm_api_config import LLMApiConfig
@@ -14,6 +15,7 @@ __all__ = [
     "Account",
     "AccountMapping",
     "AgentPreset",
+    "AgentPresetRevision",
     "ChatHistory",
     "Customer",
     "LLMApiConfig",

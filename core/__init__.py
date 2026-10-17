@@ -1,6 +1,7 @@
 from .account import AccountManager
 from .account_mapping import AccountMappingManager
 from .agent_preset import AgentPresetManager
+from .agent_preset_revision import AgentPresetRevisionManager
 from .customer import CustomerManager
 from .chat_history import ChatHistoryManager
 from .llm_api_config import LLMApiConfigManager
@@ -16,6 +17,7 @@ __all__ = [
     "AccountManager",
     "AccountMappingManager",
     "AgentPresetManager",
+    "AgentPresetRevisionManager",
     "PlatformManager",
     "MessageManager",
     "ChatHistoryManager",

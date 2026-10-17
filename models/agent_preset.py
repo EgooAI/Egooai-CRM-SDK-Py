@@ -11,6 +11,7 @@ class AgentPreset(SQLModel, table=True):
     prompt: str
     llm_level: int = Field(ge=0, le=LLM_MAX_LEVEL)
     tools: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    enabled: bool = Field(default=True)
 
 
 __all__ = ["AgentPreset", "LLM_MAX_LEVEL"]

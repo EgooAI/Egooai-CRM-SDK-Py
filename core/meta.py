@@ -44,6 +44,12 @@ class MetaManager:
                 meta = self._get_or_create_meta(session)
                 return meta.value
 
+    def get_meta(self, key: str) -> Optional[Meta]:
+        """按 key 读取记录；不存在时返回 None，不创建行。"""
+        normalized_key = self._normalize_meta_key(key)
+        with Session(self.engine) as session:
+            return session.get(Meta, normalized_key)
+
     def upsert_meta(self, meta: Meta) -> None:
         """按 key 执行 UPSERT；相同 value 不会重复更新或插入。"""
         normalized_key = self._normalize_meta_key(meta.key)

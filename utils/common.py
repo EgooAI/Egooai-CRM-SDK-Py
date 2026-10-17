@@ -15,6 +15,8 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlmodel import SQLModel, create_engine
 
+from utils.migrations import run_schema_migrations
+
 K = TypeVar("K")
 V = TypeVar("V")
 
@@ -128,6 +130,7 @@ def _create_shared_engine(database_path: Path) -> Engine:
         cursor.close()
 
     SQLModel.metadata.create_all(engine)
+    run_schema_migrations(engine)
     return _attach_shared_dispose(engine, database_path)
 
 

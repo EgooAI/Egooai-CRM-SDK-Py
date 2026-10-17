@@ -60,6 +60,18 @@ class MetaManagerTestCase(unittest.TestCase):
                     connection.close()
                 self.assertEqual(rows, [("build", value)])
 
+    def test_get_meta_reads_value_without_creating_missing_row(self) -> None:
+        self.assertIsNone(self.manager.get_meta("seed"))
+        self.assertEqual(self._count_rows(), 0)
+
+        self.manager.upsert_meta(Meta(key="seed", value="abc"))
+        found = self.manager.get_meta("seed")
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.value, "abc")
+        self.assertEqual(self._count_rows(), 1)
+
     def test_concurrent_get_version_creates_singleton_row_once(self) -> None:
         results: list[str] = []
         errors: list[BaseException] = []

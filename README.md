@@ -35,6 +35,7 @@ uv sync
 - `TranslateManager`
 - `MetaManager`
 - `AgentPresetManager`
+- `AgentPresetRevisionManager`
 
 `models/` 提供对应模型：
 
@@ -48,6 +49,7 @@ uv sync
 - `Translate`
 - `Meta`
 - `AgentPreset`
+- `AgentPresetRevision`
 
 ### Registry
 
@@ -213,6 +215,18 @@ register_default_llms()
 - 若未设置 `max_tool_rounds`，SDK 使用默认上限 10，避免无限循环
 - 若等级或工具未注册，运行期解析会抛错
 - 当前配置适合本地开发，不建议把真实密钥提交到仓库
+
+## AgentPreset 与版本历史
+
+`AgentPreset` 保存 Agent 的名称、描述、提示词、LLM level、工具与 `enabled` 启用状态；
+`llm_level` 会映射到对应的 LLM 配置。
+
+`AgentPresetRevisionManager` 提供追加式历史快照：`add_revision` / `get_revision` /
+`list_revisions(apid, limit)` / `prune_revisions(apid, keep)`。快照中的 `source`
+与 `note` 由宿主定义，SDK 不解释其取值；删除 `AgentPreset` 会级联删除其历史。
+
+SDK 表结构的追加列迁移在 `utils/migrations.py` 中声明，并在建表后幂等执行，
+以保证旧数据库升级后仍可读写。
 
 ## 并发与 SQLite
 

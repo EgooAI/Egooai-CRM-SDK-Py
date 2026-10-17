@@ -10,7 +10,7 @@ class AgentPresetManager(BaseManager[AgentPreset]):
 
     model = AgentPreset
     pk_field = "apid"
-    editable_fields = ("name", "description", "prompt", "llm_level", "tools")
+    editable_fields = ("name", "description", "prompt", "llm_level", "tools", "enabled")
     pk_is_auto = False
 
     @staticmethod

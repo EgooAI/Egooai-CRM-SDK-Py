@@ -26,6 +26,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
         prompt: str = "Help the customer politely",
         llm_level: int = 2,
         tools: list[str] | None = None,
+        enabled: bool = True,
     ) -> AgentPreset:
         payload = {
             "apid": apid,
@@ -33,6 +34,7 @@ class AgentPresetManagerTestCase(unittest.TestCase):
             "description": description,
             "prompt": prompt,
             "llm_level": llm_level,
+            "enabled": enabled,
         }
         if tools is not None:
             payload["tools"] = tools
@@ -180,6 +182,19 @@ class AgentPresetManagerTestCase(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             self.manager.upsert_agent_preset(invalid_agent_preset)
+
+    def test_enabled_defaults_to_true_and_persists_toggle(self) -> None:
+        agent_preset = self._build_agent_preset()
+        self.manager.upsert_agent_preset(agent_preset)
+        self.assertTrue(self.manager.get_agent_preset(agent_preset.apid).enabled)
+
+        disabled = self._build_agent_preset(enabled=False)
+        self.manager.upsert_agent_preset(disabled)
+        self.assertFalse(self.manager.get_agent_preset(agent_preset.apid).enabled)
+        self.assertFalse(disabled.enabled)
+
+        self.manager.edit_agent_preset(agent_preset.apid, self._build_agent_preset())
+        self.assertTrue(self.manager.get_agent_preset(agent_preset.apid).enabled)
 
     def test_concurrent_upsert_agent_preset_skips_duplicate_payload(self) -> None:
         errors: list[BaseException] = []
