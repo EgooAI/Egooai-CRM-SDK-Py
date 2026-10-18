@@ -1,6 +1,6 @@
 from .account import Account
 from .account_mapping import AccountMapping
-from .agent_preset import AgentPreset
+from .agent_preset import AgentPreset, LLM_MAX_LEVEL
 from .agent_preset_revision import AgentPresetRevision
 from .chat_history import ChatHistory
 from .customer import Customer
@@ -19,6 +19,7 @@ __all__ = [
     "ChatHistory",
     "Customer",
     "LLMApiConfig",
+    "LLM_MAX_LEVEL",
     "Message",
     "Meta",
     "Platform",
