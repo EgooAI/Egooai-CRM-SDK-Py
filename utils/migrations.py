@@ -13,6 +13,8 @@ from sqlalchemy.engine import Engine
 # (table, column, column definition) — append new additive columns here.
 _ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("agentpreset", "enabled", "BOOLEAN NOT NULL DEFAULT 1"),
+    ("agentpreset", "requires_tool", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("agent_preset_revision", "requires_tool", "BOOLEAN NOT NULL DEFAULT 0"),
 )
 
 

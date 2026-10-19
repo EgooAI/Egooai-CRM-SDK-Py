@@ -22,18 +22,33 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._lock = RLock()
         self._tools: dict[str, Callable[..., Any]] = {}
+        self._specs: dict[str, Any] = {}
 
-    def register(self, name: str, func: Callable[..., Any]) -> None:
+    def register(
+        self,
+        name: str,
+        func: Callable[..., Any],
+        spec: Any = None,
+    ) -> None:
+        """Register a callable; ``spec`` (a ``ToolSpec``) is optional metadata."""
         if not name:
             raise ValueError("tool name must not be empty")
         if not callable(func):
             raise TypeError("tool func must be callable")
+        if spec is not None and getattr(spec, "name", name) != name:
+            raise ValueError("tool spec name must match the registered name")
         with self._lock:
             self._tools[name] = func
+            if spec is not None:
+                self._specs[name] = spec
 
     def get(self, name: str) -> Optional[Callable[..., Any]]:
         with self._lock:
             return self._tools.get(name)
+
+    def spec(self, name: str) -> Any:
+        with self._lock:
+            return self._specs.get(name)
 
     def require(self, name: str) -> Callable[..., Any]:
         tool = self.get(name)
@@ -45,9 +60,14 @@ class ToolRegistry:
         with self._lock:
             return dict(self._tools)
 
+    def list_specs(self) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._specs)
+
     def clear(self) -> None:
         with self._lock:
             self._tools.clear()
+            self._specs.clear()
 
 
 class LLMRegistry:
@@ -124,8 +144,8 @@ llm_registry = LLMRegistry()
 output_normalizer_registry = OutputNormalizerRegistry()
 
 
-def register_tool(name: str, func: Callable[..., Any]) -> None:
-    tool_registry.register(name, func)
+def register_tool(name: str, func: Callable[..., Any], spec: Any = None) -> None:
+    tool_registry.register(name, func, spec=spec)
 
 
 def register_llm(level: int, config: LLMConfig) -> None:

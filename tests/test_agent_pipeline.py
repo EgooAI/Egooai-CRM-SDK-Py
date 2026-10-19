@@ -235,24 +235,57 @@ class AgentPipelineTestCase(unittest.TestCase):
         with self.assertRaises(AgentPresetResolutionError):
             pipeline.run(AgentPipelineInput(user_input="hello", agent_preset=preset))
 
-    def test_run_raises_when_llm_requests_tool_without_tool_call_payload(self) -> None:
+    def test_run_counts_tool_rounds_by_llm_invocation(self) -> None:
+        register_llm(2, self._build_llm_config())
+        register_tool("first_tool", lambda keyword: {"keyword": keyword})
+        register_tool("second_tool", lambda keyword: {"keyword": keyword})
+        preset = self._build_agent_preset(tools=["first_tool", "second_tool"])
+        # Two calls in one response count as one round, not two.
+        client = StaticLLMClient([
+            LLMResponse(
+                text="", needs_tool=True,
+                tool_calls=[
+                    LLMToolCall(name="first_tool", tool_input={"keyword": "Alice"}, call_id="c1"),
+                    LLMToolCall(name="second_tool", tool_input={"keyword": "Bob"}, call_id="c2"),
+                ],
+            ),
+            LLMResponse(text="done"),
+        ])
+
+        result = AgentPipeline(llm_client=client, max_tool_rounds=1).run(
+            AgentPipelineInput(user_input="go", agent_preset=preset)
+        )
+
+        self.assertEqual(result.status, AgentPipelineResultStatus.COMPLETED)
+        self.assertEqual(result.output_text, "done")
+        self.assertEqual([record.name for record in result.tool_call_records], ["first_tool", "second_tool"])
+
+    def test_run_treats_tool_claim_without_call_payload_as_text(self) -> None:
         register_llm(2, self._build_llm_config())
         preset = self._build_agent_preset(tools=[])
         client = StaticLLMClient([
+            # A provider that claims a tool call but sends none is treated as text.
             LLMResponse(text="missing tool payload", needs_tool=True, tool_call=None),
         ])
 
-        with self.assertRaises(LLMInvocationError):
-            AgentPipeline(llm_client=client).run(AgentPipelineInput(user_input="hello", agent_preset=preset))
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="hello", agent_preset=preset)
+        )
+
+        self.assertEqual(result.status, AgentPipelineResultStatus.COMPLETED)
+        self.assertEqual(result.output_text, "missing tool payload")
+        self.assertEqual(result.tool_call_records, [])
 
     def test_run_honors_configured_tool_limit_and_default_budget(self) -> None:
         register_tool("search_customer", lambda keyword: {"keyword": keyword})
         preset = self._build_agent_preset(tools=["search_customer"])
         cases = (
-            (5, AgentPipelineResultStatus.TOOL_ROUNDS_LIMITED, 5, "", "Eve"),
-            (None, AgentPipelineResultStatus.COMPLETED, 7, "final answer", "Frank"),
+            # The model keeps asking for tools after the budget; the closing
+            # request is told not to, so its text is kept and the run is marked limited.
+            (5, AgentPipelineResultStatus.TOOL_ROUNDS_LIMITED, 6, 5, "need tool", "Eve"),
+            (None, AgentPipelineResultStatus.COMPLETED, 7, 6, "final answer", "Frank"),
         )
-        for limit, status, iterations, output, last_keyword in cases:
+        for limit, status, iterations, executed, output, last_keyword in cases:
             with self.subTest(max_tool_rounds=limit):
                 register_llm(2, LLMConfig(
                     base_url="https://api.example.com/v1",
@@ -277,6 +310,8 @@ class AgentPipelineTestCase(unittest.TestCase):
                 self.assertEqual(result.output_text, output)
                 self.assertEqual(result.iterations, iterations)
                 self.assertEqual(len(client.requests), iterations)
+                # The closing request never executes tools, so it adds no record.
+                self.assertEqual(len(result.tool_call_records), executed)
                 self.assertEqual(result.tool_call.name, "search_customer")
                 self.assertEqual(result.tool_result.content, {"keyword": last_keyword})
 
@@ -306,8 +341,8 @@ class AgentPipelineTestCase(unittest.TestCase):
         self.assertIsNotNone(result.tool_result)
         assert result.tool_result is not None
         self.assertFalse(result.tool_result.ok)
-        self.assertEqual(result.tool_result.error, "boom")
-        self.assertEqual(client.requests[1].tool_results[0].error, "boom")
+        self.assertIn("boom", result.tool_result.error or "")
+        self.assertIn("boom", client.requests[1].tool_results[0].error or "")
 
 
     def test_tool_schema_uses_parameterized_annotations(self) -> None:

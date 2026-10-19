@@ -29,6 +29,7 @@ class AgentPresetRevision(SQLModel, table=True):
     prompt: str
     llm_level: int = Field(ge=0, le=LLM_MAX_LEVEL)
     tools: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    requires_tool: bool = Field(default=False)
     source: str = ""
     note: str = ""
     created_time: datetime = Field(default_factory=utc_now)

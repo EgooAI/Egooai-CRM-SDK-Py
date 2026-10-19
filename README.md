@@ -75,9 +75,21 @@ from agent_pipeline.resolver import resolve_agent_preset
 3. 调用 LLM
 4. 如需工具，则执行对应的 tool call
 5. 将工具结果回填给 LLM，继续下一轮
-6. 直到 LLM 直接返回最终回答，或触发上下文/工具轮次限制
+6. 直到 LLM 直接返回最终回答，或触发上下文/工具预限制
 
-当前已支持 **多轮工具调用**；可通过 `max_tool_rounds` 控制上限。
+当前已支持 **多轮工具调用** 与 **同一轮多个工具调用**。有两个上限：
+
+- `max_tool_rounds`：按 LLM 调用轮次计算（不是按工具结果数）；默认 10；
+- 单次运行的调用总数上限：`AgentPipeline(max_tool_calls=...)`，默认 20，防止并行调用放大数量。
+
+达到轮次上限时，pipeline 会用 `tool_choice: none` 再请求一次收尾；收尾成功则状态仍是
+`completed`，收尾仍要求调用工具或调用总数触顶时状态为 `tool_rounds_limited`，
+但已有的文本、调用记录和意图都会保留，不会返回空结果。
+
+工具失败（未知工具名、参数 JSON 非法、工具抛异常、工具超时）都会作为失败结果回传给模型，
+运行不中断；只有"preset 里声明了但注册表中不存在"这类配置错误才会在运行前报错。
+如果供应商不支持强制的 `tool_choice`（例如部分 reasoning 模型），pipeline 会自动降级为
+`auto` 并重试一次。
 
 ## 快速开始
 
@@ -156,11 +168,47 @@ print(result.iterations)
 
 返回结果中常用字段包括：
 
-- `output_text`：最终输出文本，或命中限制时的兜底文案
-- `iterations`：实际进行了多少次 LLM 调用
-- `tool_call`：最后一次工具调用的请求信息
-- `tool_result`：最后一次工具调用的返回结果
+- `output_text`：最终输出文本
+- `iterations`：实际进行了多少次 LLM 调用（含收尾调用）
+- `tool_call` / `tool_result`：最后一次工具调用的请求与结果（兼容旧调用方）
+- `tool_call_records`：**完整**调用记录（`call_id`、工具名、参数、成功/失败、结果或错误、耗时、轮次）
+- `tool_exchanges`：按轮次分组的 assistant 调用与 tool 结果，供 LLM 客户端回放
+- `intents`：效果类工具产生的意图（SDK 只承载，不解释含义）
+- `usage`：累计 token 用量（供应商未返回时为空）
+- `duration_ms`：本次运行耗时
+- `status`：`completed` / `context_limited` / `tool_rounds_limited`
 - `raw_responses`：底层 LLM 返回的原始响应列表，便于调试
+
+## 工具元数据与上下文
+
+工具注册可以附带元数据（可选，旧用法不变）：
+
+```python
+from agent_pipeline import ToolContext, ToolSpec, register_tool
+
+def reply_customer(ctx: ToolContext, reply: str) -> str:
+    ctx.emit("reply_customer", {"reply": reply})
+    return "recorded"
+
+register_tool("reply_customer", reply_customer, spec=ToolSpec(
+    name="reply_customer",
+    title="回复客户",
+    category="effect",       # read / effect
+    repeatable=True,
+    max_calls=3,
+    timeout_seconds=10,
+))
+```
+
+- `category="effect"` 表示调用即代表一个对外动作意图；工具自己写入 `ToolContext`，
+  运行结果通过 `intents` 带出，SDK 不执行任何对外动作；
+- 参数说明可以用 `Annotated[str, "说明"]` 写在函数签名上，会进入 JSON schema；
+- 声明了 `ctx: ToolContext` 的参数在执行时自动注入，**不会**进入 schema，模型无法伪造；
+- `AgentPreset.requires_tool` 为真时，pipeline 会强制 `tool_choice="required"`；
+- `ToolRegistry.list()`、`get()` 等旧接口保持不变；`list_specs()` 返回元数据。
+
+**输出归一化注册表**（`output_normalizer_registry`）是旧机制：它只在模型输出纯文本、
+需要解析成结构化结果时使用。新 Agent 应通过效果类工具表达动作，不要依赖解析文本。
 
 ## LLM 配置
 
@@ -210,15 +258,17 @@ register_default_llms()
 
 - `AgentPreset.llm_level` 会映射到对应的 LLM 配置
 - `context` 表示工作流允许的上下文长度上限；超限时不会继续请求 LLM，结果状态为 `context_limited`，由调用方决定提示文案
-- `context` 的估算会计入 system prompt、user input、tool prompt、tool schema，以及累计的 tool result；因此不只是用户输入过长会触发超限，工具结果文本过长也会触发
-- `max_tool_rounds` 用于限制最多可执行多少轮工具调用；超过后结果状态为 `tool_rounds_limited`，由调用方决定提示文案
+- `context` 的估算会计入 system prompt、user input、tool prompt、tool schema、工具名与调用参数，以及累计的 tool result；因此不只是用户输入过长会触发超限，工具结果文本过长也会触发
+- `max_tool_rounds` 用于限制最多执行多少轮工具调用（按 LLM 调用轮次计）；超过后会用 `tool_choice: none` 收尾一次，状态为 `tool_rounds_limited`，由调用方决定提示文案
 - 若未设置 `max_tool_rounds`，SDK 使用默认上限 10，避免无限循环
 - 若等级或工具未注册，运行期解析会抛错
 - 当前配置适合本地开发，不建议把真实密钥提交到仓库
 
 ## AgentPreset 与版本历史
 
-`AgentPreset` 保存 Agent 的名称、描述、提示词、LLM level、工具与 `enabled` 启用状态；
+`AgentPreset` 保存 Agent 的名称、描述、提示词、LLM level、工具、`enabled` 启用状态与
+`requires_tool`（是否必须至少调用一次工具）。`requires_tool` 通过追加式迁移增加，
+旧数据库升级后默认关闭；`AgentPresetRevision` 快照也包含该字段。
 `llm_level` 会映射到对应的 LLM 配置。
 
 `AgentPresetRevisionManager` 提供追加式历史快照：`add_revision` / `get_revision` /

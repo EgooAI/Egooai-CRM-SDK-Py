@@ -4,8 +4,8 @@ from .errors import (
     LLMInvocationError,
     ToolSelectionError,
 )
-from .llm import LLMClient, OpenAICompatibleLLMClient
-from .pipeline import AgentPipeline
+from .llm import LLMClient, OpenAICompatibleLLMClient, StaticLLMClient
+from .pipeline import AgentPipeline, DEFAULT_MAX_TOOL_CALLS, DEFAULT_MAX_TOOL_ROUNDS
 from .registry import (
     LLMConfig,
     LLMRegistry,
@@ -25,15 +25,27 @@ from .resolver import (
     resolve_agent_preset,
     resolve_agent_preset_by_apid,
 )
-from .tools import ToolExecutor
+from .tools import (
+    CATEGORY_EFFECT,
+    CATEGORY_READ,
+    ToolContext,
+    ToolExecutor,
+    ToolSpec,
+    build_tool_schema,
+    tool_use_instruction,
+)
 from .types import (
     AgentPipelineInput,
     AgentPipelineResult,
     AgentPipelineResultStatus,
+    EffectIntent,
     LLMRequest,
     LLMResponse,
     LLMToolCall,
     LLMToolSchema,
+    LLMUsage,
+    ToolCallRecord,
+    ToolExchange,
     ToolExecutionResult,
 )
 
@@ -42,8 +54,12 @@ __all__ = [
     "AgentPipelineInput",
     "AgentPipelineResult",
     "AgentPipelineResultStatus",
+    "DEFAULT_MAX_TOOL_CALLS",
+    "DEFAULT_MAX_TOOL_ROUNDS",
+    "EffectIntent",
     "LLMClient",
     "OpenAICompatibleLLMClient",
+    "StaticLLMClient",
     "LLMConfig",
     "LLMRegistry",
     "ToolRegistry",
@@ -63,8 +79,17 @@ __all__ = [
     "LLMResponse",
     "LLMToolCall",
     "LLMToolSchema",
+    "LLMUsage",
+    "CATEGORY_EFFECT",
+    "CATEGORY_READ",
+    "ToolCallRecord",
+    "ToolContext",
+    "ToolExchange",
     "ToolExecutor",
     "ToolExecutionResult",
+    "ToolSpec",
+    "build_tool_schema",
+    "tool_use_instruction",
     "AgentPipelineError",
     "AgentPresetResolutionError",
     "LLMInvocationError",
