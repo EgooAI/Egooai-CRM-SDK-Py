@@ -91,6 +91,14 @@ from agent_pipeline.resolver import resolve_agent_preset
 如果供应商不支持强制的 `tool_choice`（例如部分 reasoning 模型），pipeline 会自动降级为
 `auto` 并重试一次。
 
+读取类工具（`category="read"`）的单次结果默认按 8000 字符截断
+（`ToolExecutor(max_result_chars=...)` 或调用时的 `max_result_chars` 可调整）：
+文本保留前缀并追加原始长度提示；结构化结果超过上限时替换为
+`{"truncated": true, "original_chars": N, "notice": ...}`，避免模型收到半截 JSON。
+截断发生在执行层，因此回传给模型的内容、`ToolCallRecord.content` 与上下文估算
+看到的是同一份结果，被截断时记录里的 `original_chars` 非空。
+效果类工具（`category="effect"`）不截断：意图已在截断前写入收集器，返回值只是确认。
+
 ## 快速开始
 
 ### 1) 数据层示例

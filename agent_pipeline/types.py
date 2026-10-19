@@ -106,6 +106,8 @@ class ToolExecutionResult:
     error: Optional[str] = None
     call_id: Optional[str] = None
     arguments: dict[str, Any] = field(default_factory=dict)
+    # Original size before truncation, ``None`` when the result was not cut.
+    original_chars: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +130,9 @@ class ToolCallRecord:
     error: Optional[str] = None
     duration_ms: float = 0.0
     round: int = 0
+    # Set when a read result exceeded the executor's size limit. ``content`` then
+    # carries the truncated text (or a truncation notice for structured results).
+    original_chars: Optional[int] = None
 
 
 @dataclass(frozen=True)

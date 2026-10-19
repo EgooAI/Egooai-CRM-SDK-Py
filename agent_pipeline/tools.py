@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
@@ -13,6 +14,10 @@ from agent_pipeline.types import EffectIntent, ToolCallRecord, ToolExecutionResu
 CATEGORY_READ = "read"
 CATEGORY_EFFECT = "effect"
 DEFAULT_TOOL_TIMEOUT_SECONDS = 30.0
+# Upper bound for one read tool's result, applied before the model sees it so the
+# stored record, the next request and the context estimate all agree.
+DEFAULT_MAX_RESULT_CHARS = 8000
+_TRUNCATION_NOTE = "\n…[结果已截断：原始长度 {size} 字符，请缩小查询范围]"
 
 
 class ToolContext:
@@ -215,6 +220,7 @@ class ToolExecutor:
         context: Optional[ToolContext] = None,
         call_id: Optional[str] = None,
         round_index: int = 0,
+        max_result_chars: Optional[int] = DEFAULT_MAX_RESULT_CHARS,
     ) -> tuple[ToolExecutionResult, ToolCallRecord]:
         """Run one call. Unknown names, bad arguments, exceptions and timeouts become failures."""
         started = time.perf_counter()
@@ -235,6 +241,7 @@ class ToolExecutor:
 
         error: Optional[str] = None
         content: Any = None
+        original_chars: Optional[int] = None
         try:
             keyword_input = self._normalize_keyword_input(tool, arguments)
             for parameter in inspect.signature(tool).parameters.values():
@@ -249,6 +256,14 @@ class ToolExecutor:
         except Exception as exc:
             error = f"工具 {tool_name} 执行失败：{type(exc).__name__}: {exc}"
 
+        if error is None:
+            # Effect tools keep their payload intact: the host already holds the
+            # intent, and this return value only confirms the recording.
+            category = getattr(spec, "category", CATEGORY_READ) if spec is not None else CATEGORY_READ
+            content, original_chars = self._bounded_result(
+                content, max_result_chars if category != CATEGORY_EFFECT else None,
+            )
+
         record = ToolCallRecord(
             call_id=call_id,
             name=tool_name,
@@ -258,10 +273,42 @@ class ToolExecutor:
             error=error,
             duration_ms=(time.perf_counter() - started) * 1000,
             round=round_index,
+            original_chars=original_chars,
         )
         return ToolExecutionResult(
             name=tool_name, ok=error is None, content=content, error=error, call_id=call_id,
+            original_chars=original_chars,
         ), record
+
+    @staticmethod
+    def _bounded_result(content: Any, limit: Optional[int]) -> tuple[Any, Optional[int]]:
+        """Return ``(content, original_chars)``, cutting oversized read results.
+
+        A string over the limit keeps its first ``limit`` characters plus a note
+        carrying the original size. Structured content is measured as JSON and
+        replaced by that same note, so the model never receives a half-parsed
+        object. ``original_chars`` is ``None`` when nothing was cut.
+        """
+        if limit is None or content is None:
+            return content, None
+        if isinstance(content, str):
+            text = content
+            result_text = content
+        else:
+            try:
+                text = json.dumps(content, ensure_ascii=False)
+            except (TypeError, ValueError):
+                text = str(content)
+            result_text = content
+        if len(text) <= limit:
+            return result_text, None
+        note = _TRUNCATION_NOTE.format(size=len(text))
+        if isinstance(content, str):
+            return f"{content[:limit]}{note}", len(text)
+        return (
+            {"truncated": True, "original_chars": len(text), "notice": note.strip()},
+            len(text),
+        )
 
 
 def tool_use_instruction(spec: Optional[ToolSpec], name: str) -> str:
@@ -282,6 +329,7 @@ def tool_use_instruction(spec: Optional[ToolSpec], name: str) -> str:
 __all__ = [
     "CATEGORY_EFFECT",
     "CATEGORY_READ",
+    "DEFAULT_MAX_RESULT_CHARS",
     "DEFAULT_TOOL_TIMEOUT_SECONDS",
     "ToolContext",
     "ToolExecutor",

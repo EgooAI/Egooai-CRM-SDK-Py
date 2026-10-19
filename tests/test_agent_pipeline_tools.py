@@ -371,6 +371,29 @@ class _PipelineCase(unittest.TestCase):
         self.assertEqual(client.requests[0].tool_schemas, [])
         self.assertEqual(client.requests[0].tool_prompt, "")
 
+    def test_an_oversized_read_result_reaches_the_next_request_truncated(self) -> None:
+        self._llm()
+
+        def big(keyword: str) -> dict:
+            return {"keyword": keyword, "rows": ["r" * 500 for _ in range(30)]}
+
+        register_tool("big", big)
+        client = StaticLLMClient([
+            LLMResponse(text="", needs_tool=True, tool_call=LLMToolCall(name="big", tool_input={"keyword": "k"})),
+            LLMResponse(text="done"),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="go", agent_preset=self._preset(tools=["big"]))
+        )
+
+        # The model and the caller see the same cut: storage, replay and the
+        # context estimate must not disagree with what was actually answered.
+        replayed = client.requests[1].tool_results[0].content
+        self.assertTrue(replayed["truncated"])
+        self.assertEqual(replayed, result.tool_call_records[0].content)
+        self.assertIsNotNone(result.tool_call_records[0].original_chars)
+
     def test_effect_intents_are_collected_only_for_successful_calls(self) -> None:
         self._llm()
 
