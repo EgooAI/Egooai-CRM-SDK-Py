@@ -22,9 +22,12 @@ class ToolContext:
     intents here instead of performing the action themselves.
     """
 
-    def __init__(self, *, mode: str = "", scope: Any = None) -> None:
+    def __init__(
+        self, *, mode: str = "", scope: Any = None, call_id: Optional[str] = None
+    ) -> None:
         self.mode = mode
         self.scope = scope
+        self.call_id = call_id
         self._intents: list[EffectIntent] = []
         # Payloads recorded by successful effect calls; duplicates are checked
         # against this even though only the latest round's intents survive.
@@ -42,7 +45,7 @@ class ToolContext:
         intent = EffectIntent(
             kind=kind,
             content=dict(content),
-            call_id=call_id,
+            call_id=self.call_id if call_id is None else call_id,
             mode=self.mode,
             sequence=sequence if sequence is not None else len(self._intents) + 1,
         )
@@ -58,9 +61,9 @@ class ToolContext:
     def intents(self) -> list[EffectIntent]:
         return list(self._intents)
 
-    def child(self) -> "ToolContext":
+    def child(self, *, call_id: Optional[str] = None) -> "ToolContext":
         """A collector for one call, sharing mode, scope and prior recordings."""
-        child = ToolContext(mode=self.mode, scope=self.scope)
+        child = ToolContext(mode=self.mode, scope=self.scope, call_id=call_id)
         child.recorded = list(self.recorded)
         child.recorded_sequence = self.recorded_sequence
         return child
@@ -194,9 +197,14 @@ class ToolExecutor:
     def _call_with_timeout(self, func, *args, timeout: Optional[float], **kwargs):
         if timeout is None:
             return func(*args, **kwargs)
-        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool-call") as pool:
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool-call")
+        try:
             future = pool.submit(func, *args, **kwargs)
             return future.result(timeout=timeout)
+        finally:
+            # A running Python thread cannot be forcefully cancelled. Do not wait
+            # for it here, though, or the timeout would have no practical effect.
+            pool.shutdown(wait=False, cancel_futures=True)
 
     def execute(
         self,
@@ -222,10 +230,7 @@ class ToolExecutor:
             )
 
         tool = runtime.tools[runtime.tool_names.index(tool_name)]
-        spec = next(
-            (item for name, item in zip(runtime.tool_names, runtime.tool_specs, strict=False) if name == tool_name),
-            None,
-        )
+        spec = runtime.tool_specs[runtime.tool_names.index(tool_name)]
         type_hints = get_type_hints(tool, include_extras=True)
 
         error: Optional[str] = None

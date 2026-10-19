@@ -101,10 +101,12 @@ class ToolExecutorTestCase(unittest.TestCase):
             return "late"
 
         runtime = self._build_runtime(["slow"], [slow], [ToolSpec(name="slow", timeout_seconds=0.01)])
+        started = time.perf_counter()
         result, _ = ToolExecutor().execute(runtime, "slow", {})
 
         self.assertFalse(result.ok)
         self.assertIn("超时", result.error or "")
+        self.assertLess(time.perf_counter() - started, 0.15)
 
     def test_context_parameter_is_injected_and_hidden_from_schema(self) -> None:
         def request_reply(ctx: ToolContext, reply: str) -> str:
@@ -348,6 +350,27 @@ class _PipelineCase(unittest.TestCase):
                 AgentPipelineInput(user_input="go", agent_preset=self._preset(tools=[], requires_tool=True))
             )
 
+    def test_none_choice_does_not_execute_returned_tool_calls(self) -> None:
+        self._llm()
+        executed: list[str] = []
+        register_tool("reply", lambda: executed.append("reply"))
+        client = StaticLLMClient([
+            LLMResponse(text="ignored", needs_tool=True, tool_call=LLMToolCall(name="reply")),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(
+                user_input="go",
+                agent_preset=self._preset(tools=["reply"]),
+                tool_choice="none",
+            )
+        )
+
+        self.assertEqual(executed, [])
+        self.assertTrue(result.restricted)
+        self.assertEqual(client.requests[0].tool_schemas, [])
+        self.assertEqual(client.requests[0].tool_prompt, "")
+
     def test_effect_intents_are_collected_only_for_successful_calls(self) -> None:
         self._llm()
 
@@ -360,8 +383,8 @@ class _PipelineCase(unittest.TestCase):
 
         register_tool("reply_customer", reply_customer, spec=ToolSpec(name="reply_customer", category="effect"))
         client = StaticLLMClient([
-            LLMResponse(text="", needs_tool=True, tool_call=LLMToolCall(name="reply_customer", tool_input={"text": "bad"})),
-            LLMResponse(text="", needs_tool=True, tool_call=LLMToolCall(name="reply_customer", tool_input={"text": "hi"})),
+            LLMResponse(text="", needs_tool=True, tool_call=LLMToolCall(name="reply_customer", tool_input={"text": "bad"}, call_id="bad")),
+            LLMResponse(text="", needs_tool=True, tool_call=LLMToolCall(name="reply_customer", tool_input={"text": "hi"}, call_id="good")),
             LLMResponse(text="done"),
         ])
 
@@ -375,6 +398,31 @@ class _PipelineCase(unittest.TestCase):
         self.assertEqual([intent.content["text"] for intent in result.intents], ["hi"])
         self.assertEqual(result.intents[0].mode, "simulated")
         self.assertEqual(result.intents[0].sequence, 1)
+        self.assertEqual(result.intents[0].call_id, "good")
+
+    def test_successful_effect_call_recordings_are_available_to_later_calls(self) -> None:
+        self._llm()
+
+        def reply(ctx: ToolContext, text: str) -> str:
+            if ctx.recorded:
+                raise ValueError("duplicate")
+            ctx.recorded.append({"text": text})
+            ctx.emit("reply", {"text": text})
+            return "recorded"
+
+        register_tool("reply", reply, spec=ToolSpec(name="reply", category="effect"))
+        client = StaticLLMClient([
+            LLMResponse(text="", needs_tool=True, tool_call=LLMToolCall(name="reply", tool_input={"text": "same"})),
+            LLMResponse(text="", needs_tool=True, tool_call=LLMToolCall(name="reply", tool_input={"text": "same"})),
+            LLMResponse(text="done"),
+        ])
+
+        result = AgentPipeline(llm_client=client).run(
+            AgentPipelineInput(user_input="go", agent_preset=self._preset(tools=["reply"]))
+        )
+
+        self.assertEqual([record.ok for record in result.tool_call_records], [True, False])
+        self.assertIn("duplicate", result.tool_call_records[1].error or "")
 
     def test_usage_is_accumulated_across_rounds(self) -> None:
 

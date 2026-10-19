@@ -41,6 +41,8 @@ class ToolRegistry:
             self._tools[name] = func
             if spec is not None:
                 self._specs[name] = spec
+            else:
+                self._specs.pop(name, None)
 
     def get(self, name: str) -> Optional[Callable[..., Any]]:
         with self._lock:

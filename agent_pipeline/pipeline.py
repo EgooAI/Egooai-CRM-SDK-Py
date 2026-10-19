@@ -46,7 +46,6 @@ _CLOSING_INPUT_SUFFIX = (
 class _Execution:
     results: list[ToolExecutionResult]
     intents: list[EffectIntent]
-    failure: Optional[ToolExecutionResult]
 
 
 class AgentPipeline:
@@ -71,7 +70,7 @@ class AgentPipeline:
         if not runtime.tool_names:
             return "There are no tools available. If the prompt is enough, answer directly."
         lines = ["Available tools:"]
-        for name, spec in zip(runtime.tool_names, runtime.tool_specs, strict=False):
+        for name, spec in zip(runtime.tool_names, runtime.tool_specs):
             lines.append(tool_use_instruction(spec, name))
         lines.append("Call a tool only when it is necessary to answer the user accurately.")
         return "\n".join(lines)
@@ -79,9 +78,7 @@ class AgentPipeline:
     @staticmethod
     def _build_tool_schemas(runtime: AgentPresetRuntimeConfig) -> list[LLMToolSchema]:
         schemas: list[LLMToolSchema] = []
-        for name, tool, spec in zip(
-            runtime.tool_names, runtime.tools, runtime.tool_specs, strict=False
-        ):
+        for name, tool, spec in zip(runtime.tool_names, runtime.tools, runtime.tool_specs):
             description = (spec.description or "").strip() if spec is not None else ""
             if not description:
                 from inspect import getdoc
@@ -98,17 +95,23 @@ class AgentPipeline:
 
     @staticmethod
     def _estimate_request_context_length(request_payload: LLMRequest) -> int:
+        def serialized_length(value: Any) -> int:
+            try:
+                return len(json.dumps(value, ensure_ascii=False))
+            except (TypeError, ValueError):
+                return len(str(value))
+
         total = len(request_payload.system_prompt) + len(request_payload.user_input) + len(request_payload.tool_prompt)
         for tool_schema in request_payload.tool_schemas:
             total += len(tool_schema.name)
             total += len(tool_schema.description)
-            total += len(json.dumps(tool_schema.parameters, ensure_ascii=False))
+            total += serialized_length(tool_schema.parameters)
         for call in request_payload.tool_calls:
             total += len(call.name)
-            total += len(json.dumps(call.tool_input, ensure_ascii=False))
+            total += serialized_length(call.tool_input)
         for tool_result in request_payload.tool_results:
             total += len(tool_result.name)
-            total += len(json.dumps(tool_result.content, ensure_ascii=False))
+            total += serialized_length(tool_result.content)
             if tool_result.error:
                 total += len(tool_result.error)
         return total
@@ -153,7 +156,7 @@ class AgentPipeline:
         return LLMRequest(
             system_prompt=self._compose_system_prompt(runtime),
             user_input=pipeline_input.user_input if user_input is None else user_input,
-            tool_prompt=tool_prompt,
+            tool_prompt=tool_prompt if tool_choice != "none" else "",
             tool_schemas=tool_schemas if tool_choice != "none" else [],
             tool_results=results,
             tool_calls=calls,
@@ -176,6 +179,10 @@ class AgentPipeline:
             raise AgentPresetResolutionError(
                 f"tool_choice must be one of {sorted(REQUIRED_TOOL_CHOICES)}"
             )
+        if runtime.requires_tool and pipeline_input.tool_choice == "none":
+            raise AgentPresetResolutionError(
+                f"AgentPreset {runtime.preset.apid} requires a tool call but tool_choice is none"
+            )
         if runtime.requires_tool and not runtime.tool_names:
             raise AgentPresetResolutionError(
                 f"AgentPreset {runtime.preset.apid} requires a tool call but mounts no tools"
@@ -188,14 +195,13 @@ class AgentPipeline:
         records: list[ToolCallRecord] = []
         exchanges: list[ToolExchange] = []
         raw_responses: list[object] = []
-        usage = LLMUsage()
-        iterations = 0
         total_calls = 0
         context_limit = runtime.llm.context
         max_rounds = self._round_limit(runtime, self.max_tool_rounds)
-        max_calls = max(1, int(self.max_tool_calls))
+        max_calls = int(self.max_tool_calls)
+        if max_rounds < 1 or max_calls < 1:
+            raise AgentPresetResolutionError("tool round and call limits must be positive")
         per_tool_counts: dict[str, int] = {}
-        failure_result: Optional[ToolExecutionResult] = None
         tool_prompt = self._build_tool_prompt(runtime)
         tool_schemas = self._build_tool_schemas(runtime)
         base_choice = pipeline_input.tool_choice
@@ -218,7 +224,7 @@ class AgentPipeline:
                 ),
                 tool_result=(
                     exchanges[-1].results[-1]
-                    if exchanges and exchanges[-1].results else failure_result
+                    if exchanges and exchanges[-1].results else None
                 ),
                 raw_responses=raw_responses,
                 tool_call_records=records,
@@ -258,6 +264,9 @@ class AgentPipeline:
                     output_text = normalizer(response.text)
                 return _finish(AgentPipelineResultStatus.COMPLETED, output_text)
 
+            if state_choice["value"] == "none":
+                return _finish(AgentPipelineResultStatus.TOOL_ROUNDS_LIMITED, response.text)
+
             if total_calls >= max_calls:
                 # The executed-call budget is spent: stop executing and force a
                 # closing answer so the caller still gets text and full records.
@@ -275,8 +284,6 @@ class AgentPipeline:
             total_calls += len(execution.results)
             exchanges.append(ToolExchange(calls=list(calls), results=list(execution.results)))
             intents.extend(execution.intents)
-            if execution.failure is not None:
-                failure_result = execution.failure
 
     def _invoke(
         self,
@@ -320,10 +327,9 @@ class AgentPipeline:
     ) -> _Execution:
         results: list[ToolExecutionResult] = []
         intents: list[EffectIntent] = []
-        failure: Optional[ToolExecutionResult] = None
         specs = {
             name: spec
-            for name, spec in zip(runtime.tool_names, runtime.tool_specs, strict=False)
+            for name, spec in zip(runtime.tool_names, runtime.tool_specs)
         }
         for index, call in enumerate(calls):
             if call.input_error:
@@ -334,7 +340,6 @@ class AgentPipeline:
                     call_id=call.call_id, name=call.name, arguments=dict(call.tool_input or {}),
                     ok=False, error=call.input_error, duration_ms=0.0, round=round_index,
                 ))
-                failure = results[-1]
                 continue
             if index >= remaining:
                 error = "本次运行的工具调用总数已达上限，未执行该调用。"
@@ -345,7 +350,6 @@ class AgentPipeline:
                     call_id=call.call_id, name=call.name, arguments=dict(call.tool_input or {}),
                     ok=False, error=error, duration_ms=0.0, round=round_index,
                 ))
-                failure = results[-1]
                 continue
             spec = specs.get(call.name)
             count = per_tool_counts.get(call.name, 0)
@@ -358,11 +362,10 @@ class AgentPipeline:
                     call_id=call.call_id, name=call.name, arguments=dict(call.tool_input or {}),
                     ok=False, error=limit_error, duration_ms=0.0, round=round_index,
                 ))
-                failure = results[-1]
                 continue
 
             per_tool_counts[call.name] = count + 1
-            collector = context.child()
+            collector = context.child(call_id=call.call_id)
             result, record = self.tool_executor.execute(
                 runtime, call.name, call.tool_input, context=collector,
                 call_id=call.call_id, round_index=round_index,
@@ -371,12 +374,11 @@ class AgentPipeline:
                 # Only a successful effect call contributes intents; the tool has
                 # already recorded its own payload and sequence for later rounds.
                 intents.extend(collector.intents)
+                context.recorded = collector.recorded
                 context.recorded_sequence = collector.recorded_sequence
-            else:
-                failure = result
             results.append(result)
             records.append(record)
-        return _Execution(results=results, intents=intents, failure=failure)
+        return _Execution(results=results, intents=intents)
 
     @staticmethod
     def _repeat_limit_error(spec, name: str, issued: int) -> Optional[str]:

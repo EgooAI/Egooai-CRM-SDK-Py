@@ -37,6 +37,16 @@ class AgentPresetRuntimeConfig:
     tool_specs: list[Any] = ()
     requires_tool: bool = False
 
+    def __post_init__(self) -> None:
+        if len(self.tools) != len(self.tool_names):
+            raise ValueError("tools and tool_names must have the same length")
+        specs = list(self.tool_specs)
+        if not specs:
+            specs = [None] * len(self.tool_names)
+        elif len(specs) != len(self.tool_names):
+            raise ValueError("tool_specs and tool_names must have the same length")
+        object.__setattr__(self, "tool_specs", specs)
+
 
 def resolve_agent_preset(agent_preset: AgentPreset) -> AgentPresetRuntimeConfig:
     llm_config = llm_registry.require(agent_preset.llm_level)
