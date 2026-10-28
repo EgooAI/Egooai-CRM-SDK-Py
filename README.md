@@ -286,6 +286,33 @@ register_default_llms()
 SDK 表结构的追加列迁移在 `utils/migrations.py` 中声明，并在建表后幂等执行，
 以保证旧数据库升级后仍可读写。
 
+## 实验与取消
+
+`Experiment` 是 SDK 提供的归组原语：一行记录 `agent_id`、名称与不透明的 JSON `content`。
+变体是普通的 `ChatHistory` 行，通过可空的 `experiment_id` 指回实验；SDK 不理解实验内容的业务含义，
+也不看会话里的钉定版本。删除实验只把变体置回独立状态，不会删除会话。
+
+```python
+from agent_pipeline import ExperimentStep, run_experiment
+from core import ExperimentManager
+
+manager = ExperimentManager()
+manager.add_experiment(Experiment(agent_id="agent-1", name="交期话术对比"))
+run = run_experiment(
+    steps=[ExperimentStep(index=0, input="买家问交期", kind="buyer")],
+    variant_ids=["11", "12"],
+    execute=lambda variant_id, step: run_one(variant_id, step),
+)
+```
+
+- 步骤顺序执行，同一步的变体并行（默认 4）；单个变体失败不会中断其他变体，但整次运行在失败后停止，
+  避免后续步骤在不同输入上比较。
+- `execute(variant_id, step)` 由调用方提供，SDK 不落库；如何保存回合由宿主决定。
+- `CancellationToken` 只在一回合边界检查：每次 LLM 请求前、每次工具执行前。正在进行的请求会返回并被丢弃，
+  不会强行中断 socket。被取消的运行抛 `RunCancelledError`，不留部分结果。
+- 实验表与会话归属列都是追加式迁移，旧数据库直接可用；SDK 单测在 `tests/test_experiment_manager.py`
+  与 `tests/test_agent_pipeline_cancel.py`。
+
 ## 并发与 SQLite
 
 - 相同数据库路径共享同一个 engine

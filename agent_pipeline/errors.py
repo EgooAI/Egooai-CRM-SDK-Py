@@ -12,3 +12,7 @@ class LLMInvocationError(AgentPipelineError):
 
 class ToolSelectionError(AgentPipelineError):
     """LLM 选择了未注册或未授权的工具。"""
+
+
+class RunCancelledError(AgentPipelineError):
+    """The caller cancelled the run at a checkpoint; no further work is done."""

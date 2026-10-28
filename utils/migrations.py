@@ -15,6 +15,12 @@ _ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("agentpreset", "enabled", "BOOLEAN NOT NULL DEFAULT 1"),
     ("agentpreset", "requires_tool", "BOOLEAN NOT NULL DEFAULT 0"),
     ("agent_preset_revision", "requires_tool", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("chat_history", "experiment_id", "INTEGER"),
+)
+
+# (index name, table, column) — created after additive columns exist.
+_ADDITIVE_INDEXES: tuple[tuple[str, str, str], ...] = (
+    ("idx_chat_history_experiment", "chat_history", "experiment_id"),
 )
 
 
@@ -28,6 +34,15 @@ def run_schema_migrations(engine: Engine) -> None:
                 continue
             connection.exec_driver_sql(
                 f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}'
+            )
+        for name, table, column in _ADDITIVE_INDEXES:
+            table_exists = connection.exec_driver_sql(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+            ).first()
+            if not table_exists:
+                continue
+            connection.exec_driver_sql(
+                f'CREATE INDEX IF NOT EXISTS "{name}" ON "{table}" ("{column}")'
             )
 
 

@@ -1,8 +1,17 @@
+from .cancel import CancellationToken
 from .errors import (
     AgentPipelineError,
     AgentPresetResolutionError,
     LLMInvocationError,
+    RunCancelledError,
     ToolSelectionError,
+)
+from .experiment_runner import (
+    ExperimentRun,
+    ExperimentStep,
+    StepRun,
+    VariantRun,
+    run_experiment,
 )
 from .llm import LLMClient, OpenAICompatibleLLMClient, StaticLLMClient
 from .pipeline import AgentPipeline, DEFAULT_MAX_TOOL_CALLS, DEFAULT_MAX_TOOL_ROUNDS
@@ -94,4 +103,11 @@ __all__ = [
     "AgentPresetResolutionError",
     "LLMInvocationError",
     "ToolSelectionError",
+    "RunCancelledError",
+    "CancellationToken",
+    "ExperimentRun",
+    "ExperimentStep",
+    "StepRun",
+    "VariantRun",
+    "run_experiment",
 ]

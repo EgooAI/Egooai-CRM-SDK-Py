@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+from agent_pipeline.cancel import CancellationToken
 from agent_pipeline.resolver import AgentPresetRuntimeConfig
 from models.agent_preset import AgentPreset
 
@@ -24,6 +25,9 @@ class AgentPipelineInput:
     tool_context: Any = None
     # ``auto`` (default), ``required`` or ``none``; ``none`` never advertises tools.
     tool_choice: str = "auto"
+    # Checked at turn boundaries (before each LLM request and each tool call).
+    # A cancelled run raises ``RunCancelledError`` and produces no result.
+    cancel_token: Optional[CancellationToken] = None
 
 
 @dataclass(frozen=True)

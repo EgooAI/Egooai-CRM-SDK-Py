@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Optional
 
 from agent_pipeline.errors import AgentPresetResolutionError, LLMInvocationError
+from agent_pipeline.cancel import CancellationToken
 from agent_pipeline.llm import LLMClient
 from agent_pipeline.resolver import (
     REQUIRED_TOOL_CHOICES,
@@ -235,6 +236,8 @@ class AgentPipeline:
             )
 
         while True:
+            if pipeline_input.cancel_token is not None:
+                pipeline_input.cancel_token.raise_if_cancelled()
             if state["tool_rounds"] >= max_rounds:
                 return self._close_out(
                     pipeline_input, runtime, exchanges, tool_prompt, tool_schemas,
@@ -280,6 +283,7 @@ class AgentPipeline:
             execution = self._execute_calls(
                 runtime, calls, context, records, round_index=state["tool_rounds"],
                 remaining=max_calls - total_calls, per_tool_counts=per_tool_counts,
+                cancel_token=pipeline_input.cancel_token,
             )
             total_calls += len(execution.results)
             exchanges.append(ToolExchange(calls=list(calls), results=list(execution.results)))
@@ -324,6 +328,7 @@ class AgentPipeline:
         round_index: int,
         remaining: int,
         per_tool_counts: dict[str, int],
+        cancel_token: Optional[CancellationToken] = None,
     ) -> _Execution:
         results: list[ToolExecutionResult] = []
         intents: list[EffectIntent] = []
@@ -332,6 +337,8 @@ class AgentPipeline:
             for name, spec in zip(runtime.tool_names, runtime.tool_specs)
         }
         for index, call in enumerate(calls):
+            if cancel_token is not None:
+                cancel_token.raise_if_cancelled()
             if call.input_error:
                 results.append(ToolExecutionResult(
                     name=call.name, ok=False, error=call.input_error, call_id=call.call_id,
