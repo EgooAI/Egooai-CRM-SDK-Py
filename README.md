@@ -230,6 +230,7 @@ llm_api_config
 ├── model_name
 ├── system_prompt
 ├── context
+├── reasoning_effort              # low / medium / high / xhigh / max，默认 medium
 └── max_tool_rounds
 ```
 
@@ -246,7 +247,8 @@ LLMApiConfigManager().replace_configs([
         api_key="replace-me",
         model_name="claude-opus-4-8",
         system_prompt="You are a careful and policy-compliant assistant.",
-        context=12000,
+        context=128000,
+        reasoning_effort="high",
         max_tool_rounds=5,
     ),
 ])
@@ -267,6 +269,8 @@ register_default_llms()
 - `AgentPreset.llm_level` 会映射到对应的 LLM 配置
 - `context` 表示工作流允许的上下文长度上限；超限时不会继续请求 LLM，结果状态为 `context_limited`，由调用方决定提示文案
 - `context` 的估算会计入 system prompt、user input、tool prompt、tool schema、工具名与调用参数，以及累计的 tool result；因此不只是用户输入过长会触发超限，工具结果文本过长也会触发
+- `reasoning_effort` 会作为 OpenAI-compatible `chat/completions` 的 `reasoning_effort` 参数发送；支持 `low`、`medium`、`high`、`xhigh`、`max`，默认 `medium`
+- 请求不再发送 `temperature`，使用服务商默认值
 - `max_tool_rounds` 用于限制最多执行多少轮工具调用（按 LLM 调用轮次计）；超过后会用 `tool_choice: none` 收尾一次，状态为 `tool_rounds_limited`，由调用方决定提示文案
 - 若未设置 `max_tool_rounds`，SDK 使用默认上限 10，避免无限循环
 - 若等级或工具未注册，运行期解析会抛错

@@ -150,7 +150,7 @@ class OpenAICompatibleLLMClient:
         payload: dict[str, Any] = {
             "model": self.config.model_name,
             "messages": self._build_messages(request_payload),
-            "temperature": 0,
+            "reasoning_effort": self.config.reasoning_effort,
         }
         if request_payload.tool_schemas:
             payload["tools"] = [

@@ -28,6 +28,7 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
             model_name="example-model",
             system_prompt="system",
             context=12000,
+            reasoning_effort="high",
             max_tool_rounds=5,
         )
 
@@ -36,6 +37,7 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
         self.assertIsNotNone(saved)
         assert saved is not None
         self.assertEqual(saved.model_name, "example-model")
+        self.assertEqual(saved.reasoning_effort, "high")
 
         updated = LLMApiConfig(
             level=0,
@@ -43,6 +45,7 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
             api_key="secret",
             model_name="updated-model",
             context=12000,
+            reasoning_effort="max",
         )
         self.manager.upsert_config(updated)
 
@@ -50,6 +53,7 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
         self.assertIsNotNone(saved)
         assert saved is not None
         self.assertEqual(saved.model_name, "updated-model")
+        self.assertEqual(saved.reasoning_effort, "max")
 
     def test_replace_configs_and_to_payload(self) -> None:
         self.manager.replace_configs(
@@ -60,6 +64,7 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
                     api_key="secret",
                     model_name="model-a",
                     context=12000,
+                    reasoning_effort="low",
                 ),
                 LLMApiConfig(
                     level=1,
@@ -67,6 +72,7 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
                     api_key="secret",
                     model_name="model-b",
                     context=8000,
+                    reasoning_effort="xhigh",
                     max_tool_rounds=3,
                 ),
             ]
@@ -76,6 +82,8 @@ class LLMApiConfigManagerTestCase(unittest.TestCase):
         self.assertIsNotNone(payload)
         assert payload is not None
         self.assertEqual(payload["levels"][0]["model_name"], "model-a")
+        self.assertEqual(payload["levels"][0]["reasoning_effort"], "low")
+        self.assertEqual(payload["levels"][1]["reasoning_effort"], "xhigh")
         self.assertEqual(payload["levels"][1]["max_tool_rounds"], 3)
 
 

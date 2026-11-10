@@ -16,6 +16,7 @@ _ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("agentpreset", "requires_tool", "BOOLEAN NOT NULL DEFAULT 0"),
     ("agent_preset_revision", "requires_tool", "BOOLEAN NOT NULL DEFAULT 0"),
     ("chat_history", "experiment_id", "INTEGER"),
+    ("llm_api_config", "reasoning_effort", "TEXT NOT NULL DEFAULT 'medium'"),
 )
 
 # (index name, table, column) — created after additive columns exist.

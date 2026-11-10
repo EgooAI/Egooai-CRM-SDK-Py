@@ -9,7 +9,8 @@ class LLMApiConfig(SQLModel, table=True):
     api_key: str
     model_name: str
     system_prompt: str = ""
-    context: int = Field(default=12000, gt=0)
+    context: int = Field(default=128000, gt=0)
+    reasoning_effort: str = Field(default="medium")
     max_tool_rounds: int | None = Field(default=None, gt=0)
 
 

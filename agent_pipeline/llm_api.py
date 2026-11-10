@@ -21,6 +21,7 @@ def load_default_llm_levels(database_path: Path | str | None = None) -> dict[int
             model_name=config.model_name,
             system_prompt=_none_if_empty(config.system_prompt),
             context=config.context,
+            reasoning_effort=config.reasoning_effort,
             max_tool_rounds=config.max_tool_rounds,
         )
         for config in configs

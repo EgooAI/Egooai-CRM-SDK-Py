@@ -15,6 +15,7 @@ class LLMConfig:
     model_name: str
     system_prompt: Optional[str] = None
     context: Optional[int] = None
+    reasoning_effort: str = "medium"
     max_tool_rounds: Optional[int] = None
 
 

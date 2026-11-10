@@ -13,7 +13,7 @@ class LLMApiConfigManager(BaseManager[LLMApiConfig]):
 
     model = LLMApiConfig
     pk_field = "level"
-    editable_fields = ("base_url", "api_key", "model_name", "system_prompt", "context", "max_tool_rounds")
+    editable_fields = ("base_url", "api_key", "model_name", "system_prompt", "context", "reasoning_effort", "max_tool_rounds")
     pk_is_auto = False
 
     def get_config(self, level: int) -> Optional[LLMApiConfig]:
@@ -34,6 +34,7 @@ class LLMApiConfigManager(BaseManager[LLMApiConfig]):
                     "model_name": config.model_name,
                     "system_prompt": config.system_prompt,
                     "context": config.context,
+                    "reasoning_effort": config.reasoning_effort,
                     "max_tool_rounds": config.max_tool_rounds,
                 }
                 for config in configs

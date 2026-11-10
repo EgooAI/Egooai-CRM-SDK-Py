@@ -56,6 +56,32 @@ class SchemaTestCase(unittest.TestCase):
         }.issubset(tables))
         self.assertNotIn("schema_version", tables)
 
+    def test_bootstrap_adds_reasoning_effort_to_legacy_llm_config(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy-llm.sqlite"
+        conn = sqlite3.connect(legacy_path)
+        try:
+            conn.execute(
+                "CREATE TABLE llm_api_config (level INTEGER PRIMARY KEY, base_url TEXT, api_key TEXT, "
+                "model_name TEXT, system_prompt TEXT, context INTEGER, max_tool_rounds INTEGER)"
+            )
+            conn.execute("INSERT INTO llm_api_config VALUES (0, '', '', '', '', 8000, NULL)")
+            conn.commit()
+        finally:
+            conn.close()
+
+        _, engine = bootstrap_engine(legacy_path)
+        try:
+            conn = sqlite3.connect(legacy_path)
+            try:
+                columns = {row[1] for row in conn.execute("PRAGMA table_info(llm_api_config)")}
+                row = conn.execute("SELECT reasoning_effort FROM llm_api_config WHERE level = 0").fetchone()
+            finally:
+                conn.close()
+            self.assertIn("reasoning_effort", columns)
+            self.assertEqual(row, ("medium",))
+        finally:
+            engine.dispose()
+
     def test_bootstrap_adds_enabled_column_to_legacy_agent_preset(self) -> None:
         legacy_path = Path(self.temp_dir.name) / "legacy.sqlite"
         conn = sqlite3.connect(legacy_path)

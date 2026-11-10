@@ -37,6 +37,7 @@ class LLMApiTestCase(unittest.TestCase):
             "base_url": "https://api.example.com/v1",
             "api_key": "replace-me",
             "model_name": model_name,
+            "reasoning_effort": "high",
         }
         payload.update(overrides)
         return LLMApiConfig(**payload)
@@ -69,7 +70,7 @@ class LLMApiTestCase(unittest.TestCase):
                                 api_key="replace-me",
                                 model_name=f"model-{level}",
                                 system_prompt="policy" if level else None,
-                                context=4096, max_tool_rounds=5,
+                                context=4096, reasoning_effort="high", max_tool_rounds=5,
                             )
                             for level in configured_levels
                         })
@@ -91,6 +92,7 @@ class LLMApiTestCase(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(first[0].system_prompt, "You are a careful assistant.")
             self.assertEqual(first[0].context, 4096)
+            self.assertEqual(first[0].reasoning_effort, "high")
             self._dispose_shared_engine(db_path)
 
     def test_register_default_llms_returns_empty_when_config_table_is_empty(self) -> None:
@@ -171,6 +173,8 @@ class LLMApiTestCase(unittest.TestCase):
             )
         )
 
+        self.assertEqual(payload["reasoning_effort"], "medium")
+        self.assertNotIn("temperature", payload)
         messages = payload["messages"]
         self.assertEqual([message["role"] for message in messages], ["system", "user", "assistant", "tool"])
         self.assertEqual(messages[2]["tool_calls"][0]["id"], "call_abc")
