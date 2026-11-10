@@ -140,7 +140,7 @@ from agent_pipeline.llm_api import register_default_llms
 from core import AgentPresetManager, llm_registry
 from models import AgentPreset
 
-register_default_llms()  # 默认读取 data/crm.sqlite 的 llm_api_config 表
+register_default_llms()  # 默认读取当前目录 crm.sqlite 的 llm_api_config 表
 register_math_tools()
 
 manager = AgentPresetManager(database_path="demo.sqlite")

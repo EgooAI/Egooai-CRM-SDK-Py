@@ -5,7 +5,6 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import os
 from pathlib import Path
 from threading import RLock
 from types import MethodType
@@ -74,6 +73,13 @@ _SHARED_ENGINES = _ThreadSafeRegistry[Path, Engine]()
 
 # 按数据库绝对路径共享的进程内锁注册表。
 _DATABASE_LOCKS = _ThreadSafeRegistry[Path, Any]()
+_DEFAULT_DATABASE_PATH: Callable[[], Path] | None = None
+
+
+def set_default_database_path_provider(provider: Callable[[], Path] | None) -> None:
+    """Let a host application supply its own default without importing it here."""
+    global _DEFAULT_DATABASE_PATH
+    _DEFAULT_DATABASE_PATH = provider
 
 
 def utc_now() -> datetime:
@@ -84,21 +90,14 @@ def utc_now() -> datetime:
 def resolve_database_path(database_path: Optional[Path | str] = None) -> Path:
     """解析 sqlite 数据库文件路径。
 
-    显式传入的相对路径仍按 CWD 解析（保持调用方契约）；未传入时默认
-    使用 backend/data/crm.sqlite，避免 CWD 一变写错库。
+    显式传入的相对路径按 CWD 解析（保持调用方契约）。未传入时使用宿主
+    注册的默认值；独立使用时回退到当前目录的 crm.sqlite。
     """
     if database_path is not None:
         resolved_path = Path(database_path).resolve()
     else:
-        import os
-
-        from backend.app.shared.utils.settings import CRM_DB_RELATIVE_DEFAULT, resolve_backend_root
-
-        default_path = os.environ.get("MAA_CRM_DB_PATH", CRM_DB_RELATIVE_DEFAULT)
-        resolved_path = Path(default_path)
-        if not resolved_path.is_absolute():
-            resolved_path = resolve_backend_root() / resolved_path
-        resolved_path = resolved_path.resolve()
+        provider = _DEFAULT_DATABASE_PATH
+        resolved_path = (provider() if provider is not None else Path("crm.sqlite")).resolve()
 
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     return resolved_path
