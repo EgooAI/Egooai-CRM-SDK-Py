@@ -91,6 +91,12 @@ from agent_pipeline.resolver import resolve_agent_preset
 如果供应商不支持强制的 `tool_choice`（例如部分 reasoning 模型），pipeline 会自动降级为
 `auto` 并重试一次。
 
+`AgentPipelineInput(stop_on_tool_success=("save_result",))` 可为单次运行指定成功结束工具，
+默认空元组关闭此能力。指定工具执行成功后直接返回 `completed`，不再请求模型收尾；
+同一响应中剩余调用不执行，在调用记录和 exchange 结果中以 `ok=False` 和 `Skipped` 原因保留。
+指定工具失败时仍回传错误供模型修正，其他工具成功不触发结束，原有调用预算仍适用。
+返回前会再次检查取消标记。`output_text` 保留当前响应文本，结构化结果由调用方读取工具记录或意图。
+
 读取类工具（`category="read"`）的单次结果默认按 8000 字符截断
 （`ToolExecutor(max_result_chars=...)` 或调用时的 `max_result_chars` 可调整）：
 文本保留前缀并追加原始长度提示；结构化结果超过上限时替换为

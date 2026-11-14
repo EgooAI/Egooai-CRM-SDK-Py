@@ -75,6 +75,32 @@ class PipelineCancellationTestCase(unittest.TestCase):
 
         self.assertEqual(executed, ["first"])
 
+    def test_cancellation_during_designated_success_takes_precedence_over_completion(self) -> None:
+        for has_remaining_call in (False, True):
+            with self.subTest(has_remaining_call=has_remaining_call):
+                token = CancellationToken()
+                executed = []
+
+                def finish(ctx: ToolContext) -> str:
+                    ctx.emit("saved", {"value": "done"})
+                    token.cancel()
+                    executed.append("finish")
+                    return "ok"
+
+                register_tool("finish", finish)
+                register_tool("next", lambda: executed.append("next"))
+                calls = [LLMToolCall(name="finish", call_id="finish")]
+                if has_remaining_call:
+                    calls.append(LLMToolCall(name="next", call_id="next"))
+                client = StaticLLMClient([LLMResponse(text="", tool_calls=calls)])
+                with self.assertRaises(RunCancelledError):
+                    AgentPipeline(llm_client=client).run(AgentPipelineInput(
+                        user_input="go", agent_preset=_runtime(tool_names=("finish", "next")),
+                        cancel_token=token, stop_on_tool_success=("finish",),
+                    ))
+                self.assertEqual(executed, ["finish"])
+                self.assertEqual(len(client.requests), 1)
+
 
 class ExperimentRunnerTestCase(unittest.TestCase):
     def test_runs_steps_in_order_and_variants_in_parallel(self) -> None:

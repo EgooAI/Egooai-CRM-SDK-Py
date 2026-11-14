@@ -28,6 +28,9 @@ class AgentPipelineInput:
     # Checked at turn boundaries (before each LLM request and each tool call).
     # A cancelled run raises ``RunCancelledError`` and produces no result.
     cancel_token: Optional[CancellationToken] = None
+    # A successful call to any listed tool completes this run without another
+    # model request. Remaining calls in that response are recorded as skipped.
+    stop_on_tool_success: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

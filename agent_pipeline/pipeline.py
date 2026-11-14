@@ -47,6 +47,7 @@ _CLOSING_INPUT_SUFFIX = (
 class _Execution:
     results: list[ToolExecutionResult]
     intents: list[EffectIntent]
+    completed: bool = False
 
 
 class AgentPipeline:
@@ -284,10 +285,15 @@ class AgentPipeline:
                 runtime, calls, context, records, round_index=state["tool_rounds"],
                 remaining=max_calls - total_calls, per_tool_counts=per_tool_counts,
                 cancel_token=pipeline_input.cancel_token,
+                stop_on_tool_success=pipeline_input.stop_on_tool_success,
             )
             total_calls += len(execution.results)
             exchanges.append(ToolExchange(calls=list(calls), results=list(execution.results)))
             intents.extend(execution.intents)
+            if execution.completed:
+                if pipeline_input.cancel_token is not None:
+                    pipeline_input.cancel_token.raise_if_cancelled()
+                return _finish(AgentPipelineResultStatus.COMPLETED, response.text)
 
     def _invoke(
         self,
@@ -329,9 +335,11 @@ class AgentPipeline:
         remaining: int,
         per_tool_counts: dict[str, int],
         cancel_token: Optional[CancellationToken] = None,
+        stop_on_tool_success: tuple[str, ...] = (),
     ) -> _Execution:
         results: list[ToolExecutionResult] = []
         intents: list[EffectIntent] = []
+        completed = False
         specs = {
             name: spec
             for name, spec in zip(runtime.tool_names, runtime.tool_specs)
@@ -339,6 +347,16 @@ class AgentPipeline:
         for index, call in enumerate(calls):
             if cancel_token is not None:
                 cancel_token.raise_if_cancelled()
+            if completed:
+                error = "Skipped: the run completed after a designated tool succeeded."
+                results.append(ToolExecutionResult(
+                    name=call.name, ok=False, error=error, call_id=call.call_id,
+                ))
+                records.append(ToolCallRecord(
+                    call_id=call.call_id, name=call.name, arguments=dict(call.tool_input or {}),
+                    ok=False, error=error, duration_ms=0.0, round=round_index,
+                ))
+                continue
             if call.input_error:
                 results.append(ToolExecutionResult(
                     name=call.name, ok=False, error=call.input_error, call_id=call.call_id,
@@ -383,9 +401,10 @@ class AgentPipeline:
                 intents.extend(collector.intents)
                 context.recorded = collector.recorded
                 context.recorded_sequence = collector.recorded_sequence
+                completed = call.name in stop_on_tool_success
             results.append(result)
             records.append(record)
-        return _Execution(results=results, intents=intents)
+        return _Execution(results=results, intents=intents, completed=completed)
 
     @staticmethod
     def _repeat_limit_error(spec, name: str, issued: int) -> Optional[str]:

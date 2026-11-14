@@ -214,6 +214,81 @@ class _PipelineCase(unittest.TestCase):
         self.assertEqual([call["id"] for call in payload["messages"][2]["tool_calls"]], ["c1", "c2"])
         self.assertEqual(payload["tool_choice"], "auto")
 
+    def test_designated_success_stops_execution_and_records_the_remaining_calls(self) -> None:
+        self._llm()
+        executed = []
+
+        def finish(ctx: ToolContext, value: str) -> dict:
+            executed.append(value)
+            ctx.emit("saved", {"value": value})
+            return {"value": value}
+
+        register_tool("finish", finish, spec=ToolSpec(name="finish", category="effect"))
+        register_tool("read", lambda: executed.append("read"))
+        client = StaticLLMClient([
+            LLMResponse(text="", tool_calls=[
+                LLMToolCall(name="finish", tool_input={"value": "first"}, call_id="done"),
+                LLMToolCall(name="finish", tool_input={"value": "second"}, call_id="duplicate"),
+                LLMToolCall(name="read", call_id="read"),
+                LLMToolCall(name="finish", call_id="invalid", input_error="bad JSON"),
+            ], usage=LLMUsage(total_tokens=12)),
+        ])
+        result = AgentPipeline(llm_client=client, max_tool_rounds=1, max_tool_calls=1).run(
+            AgentPipelineInput(
+                user_input="go", agent_preset=self._preset(tools=["finish", "read"]),
+                stop_on_tool_success=("finish",),
+            )
+        )
+
+        self.assertEqual(executed, ["first"])
+        self.assertEqual(result.status.value, "completed")
+        self.assertEqual(result.iterations, 1)
+        self.assertEqual(len(client.requests), 1)
+        self.assertEqual(result.usage.total_tokens, 12)
+        self.assertEqual([intent.content for intent in result.intents], [{"value": "first"}])
+        self.assertEqual([record.call_id for record in result.tool_call_records], ["done", "duplicate", "read", "invalid"])
+        self.assertEqual([record.ok for record in result.tool_call_records], [True, False, False, False])
+        for record in result.tool_call_records[1:]:
+            self.assertIn("Skipped", record.error)
+        exchange = result.tool_exchanges[0]
+        self.assertEqual([call.call_id for call in exchange.calls], [item.call_id for item in exchange.results])
+        self.assertEqual([item.ok for item in exchange.results], [True, False, False, False])
+
+    def test_designated_failure_can_retry_and_read_success_does_not_finish(self) -> None:
+        self._llm()
+        executed = []
+
+        def finish(ctx: ToolContext, value: str) -> str:
+            executed.append(value)
+            ctx.emit("saved", {"value": value})
+            if value == "bad":
+                raise ValueError("correct the value")
+            return value
+
+        register_tool("finish", finish, spec=ToolSpec(name="finish", category="effect"))
+        register_tool("read", lambda: "lookup result")
+        client = StaticLLMClient([
+            LLMResponse(text="", tool_calls=[
+                LLMToolCall(name="finish", tool_input={"value": "bad"}, call_id="bad"),
+                LLMToolCall(name="read", call_id="read"),
+            ]),
+            LLMResponse(text="", tool_call=LLMToolCall(
+                name="finish", tool_input={"value": "corrected"}, call_id="good",
+            )),
+        ])
+        result = AgentPipeline(llm_client=client).run(AgentPipelineInput(
+            user_input="go", agent_preset=self._preset(tools=["finish", "read"]),
+            stop_on_tool_success=("finish",),
+        ))
+
+        self.assertEqual(executed, ["bad", "corrected"])
+        self.assertEqual(len(client.requests), 2)
+        self.assertIn("correct the value", client.requests[1].tool_results[0].error)
+        self.assertEqual(client.requests[1].tool_results[1].content, "lookup result")
+        self.assertEqual([record.ok for record in result.tool_call_records], [False, True, True])
+        self.assertEqual([intent.content for intent in result.intents], [{"value": "corrected"}])
+        self.assertEqual(result.status.value, "completed")
+
     def test_unknown_tool_keeps_running_and_model_sees_the_error(self) -> None:
         self._llm()
         register_tool("known", lambda: "ok")
