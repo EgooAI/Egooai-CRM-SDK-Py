@@ -36,6 +36,7 @@ uv sync
 - `MetaManager`
 - `AgentPresetManager`
 - `AgentPresetRevisionManager`
+- `ResourceManager`
 
 `models/` 提供对应模型：
 
@@ -50,6 +51,39 @@ uv sync
 - `Meta`
 - `AgentPreset`
 - `AgentPresetRevision`
+- `Resource`
+- `ResourceReference`
+
+### 通用资源存储
+
+`ResourceManager` 提供本地二进制资源存储，可保存图片、文档或任意文件。资源 ID 为实际文件字节的 `sha256:<摘要>`，同时保存 `md5:<摘要>`、大小、MIME 和调用方提供的扩展元数据。相同字节复用一个对象，引用身份单独保存。
+
+```python
+from core import ResourceManager
+
+resources = ResourceManager(database_path="demo.sqlite")
+resources.initialize()
+document = resources.put(b"example document", media_type="text/plain")
+reference = resources.link(
+    document.resource_id,
+    namespace="workspace-a",
+    owner_type="document",
+    owner_id="document-1",
+)
+record, content = resources.read_reference(reference.reference_id, namespace="workspace-a")
+```
+
+默认文件目录为数据库完整文件名后加 `.resources`，示例中是 `demo.sqlite.resources/`。可通过 `root=` 显式指定。文件保存到 `objects/sha256/前两位/次两位/完整摘要`，临时文件进入 `staging/`。初始化显式调用，读操作不会建立表；SDK 的常规 engine 初始化也会注册这两个模型。
+
+`put` 接受 `bytes` 或二进制文件对象，可传 `max_bytes`。`get` 读取资源描述，`open` 返回调用方负责关闭的已校验文件句柄。文件缺失、损坏或已清理时抛出 `ResourceUnavailable`。重新 `put` 相同身份的完整正确字节可以修复损坏副本。
+
+`namespace + owner_type + owner_id + slot` 唯一确定一个引用，`find_reference` 可按该键查询。重复 `link` 同内容幂等，更换内容须传 `expected_resource_id`，并可通过 `retain_previous_until` 为旧对象设置保留截止时间。`expires_at=None` 为长期引用，数值为 Unix 秒到期时间。`unlink` 要求指定旧对象保留截止时间。SDK 不解析业务所有者、不提供 HTTP 鉴权，不因命名空间相同就推断调用者有访问权限。
+
+`put`、`link`、`unlink` 可通过 `transaction=` 加入同库的 `sqlite3.Connection`、SQLAlchemy Connection 或 SQLModel Session。外部事务由调用方提交或回滚，SDK 不提前提交。独立调用时 SDK 管理写事务。文件发布先于数据库提交，事务回滚可能留下无引用文件，由清理流程回收。大文件宜先独立 `put` 并指定 `retain_until`，再在业务短事务中建立引用。
+
+`collect_unreferenced(now=..., orphan_grace=..., limit=...)` 检查全部未过期引用并分批删除无引用文件，保留资源及引用描述。`retain_until` 和 `orphan_grace` 的单位分别为 Unix 秒和持续秒数，具体期限由调用方决定。SDK 不自动启动清理线程。所有写入、引用变更和删除共用 SQLite 写锁，保证独立 Manager 与其他进程不会在建立引用时被清理。Windows 正在使用的文件无法删除时会留待后续处理。
+
+完整备份需要同时保存数据库一致快照和资源目录。调用方应在备份期间阻止写入及清理，恢复时保持二者配对。
 
 ### Registry
 

@@ -11,6 +11,7 @@ from .meta import MetaManager
 from .platform import PlatformManager
 from .session_meta import SessionMetaManager
 from .translate import TranslateManager
+from .resource import ResourceManager, ResourceUnavailable
 
 __all__ = [
     "CustomerManager",
@@ -26,5 +27,7 @@ __all__ = [
     "MAX_VARIANTS_PER_EXPERIMENT",
     "SessionMetaManager",
     "TranslateManager",
+    "ResourceManager",
+    "ResourceUnavailable",
     "MetaManager",
 ]

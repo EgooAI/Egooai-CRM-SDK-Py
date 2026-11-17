@@ -11,6 +11,8 @@ from .meta import Meta
 from .platform import Platform
 from .session_meta import SessionMeta
 from .translate import Translate
+from .resource import Resource
+from .resource_reference import ResourceReference
 
 __all__ = [
     "Account",
@@ -27,4 +29,6 @@ __all__ = [
     "Platform",
     "SessionMeta",
     "Translate",
+    "Resource",
+    "ResourceReference",
 ]
