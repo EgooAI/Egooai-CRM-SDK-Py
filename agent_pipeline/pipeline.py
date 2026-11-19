@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from agent_pipeline.errors import AgentPresetResolutionError, LLMInvocationError
@@ -191,8 +191,10 @@ class AgentPipeline:
             )
 
         context = pipeline_input.tool_context
-        if not isinstance(context, ToolContext):
+        if context is None:
             context = ToolContext()
+        elif not isinstance(context, ToolContext):
+            raise TypeError("tool_context must be a ToolContext")
         intents: list[EffectIntent] = []
         records: list[ToolCallRecord] = []
         exchanges: list[ToolExchange] = []
@@ -299,17 +301,13 @@ class AgentPipeline:
         self,
         request_payload: LLMRequest,
         state_choice: dict[str, str],
-        *,
-        system_prompt: Optional[str] = None,
     ):
         """Send one request; a rejected forced tool_choice degrades to ``auto`` once."""
         payload = request_payload
-        if system_prompt is not None:
-            payload = replace(request_payload, system_prompt=system_prompt)
         try:
             return self.llm_client.invoke(payload)
         except LLMInvocationError as exc:
-            if "tool_choice" not in str(exc):
+            if "tool_choice" not in str(exc) or state_choice["value"] == "auto":
                 raise
             # This provider rejects the explicit choice. A ``required`` run keeps
             # its prompt-level instruction ("you must call a tool"); a closing

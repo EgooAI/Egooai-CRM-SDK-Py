@@ -20,6 +20,10 @@ DEFAULT_MAX_RESULT_CHARS = 8000
 _TRUNCATION_NOTE = "\n…[结果已截断：原始长度 {size} 字符，请缩小查询范围]"
 
 
+class _MissingToolContext(RuntimeError):
+    """A tool declared a context parameter but the caller passed none."""
+
+
 class ToolContext:
     """Run context injected into tools that declare a ``ctx: ToolContext`` parameter.
 
@@ -246,9 +250,13 @@ class ToolExecutor:
             keyword_input = self._normalize_keyword_input(tool, arguments)
             for parameter in inspect.signature(tool).parameters.values():
                 if is_context_parameter(type_hints.get(parameter.name, parameter.annotation)):
-                    keyword_input[parameter.name] = context if context is not None else ToolContext()
+                    if context is None:
+                        raise _MissingToolContext
+                    keyword_input[parameter.name] = context
             timeout = spec.timeout_seconds if spec is not None and spec.timeout_seconds else self.default_timeout_seconds
             content = self._call_with_timeout(tool, timeout=timeout, **keyword_input)
+        except _MissingToolContext:
+            error = f"工具 {tool_name} 缺少运行上下文，未执行。"
         except (TypeError, ValueError) as exc:
             error = f"工具 {tool_name} 参数不合法：{exc}"
         except FutureTimeoutError:

@@ -124,6 +124,19 @@ class ToolExecutorTestCase(unittest.TestCase):
         schema = build_tool_schema(request_reply, spec)
         self.assertEqual(list(schema["properties"]), ["reply"])
 
+    def test_context_tool_without_a_context_fails_instead_of_dropping_its_effect(self) -> None:
+        def request_reply(ctx: ToolContext, reply: str) -> str:
+            ctx.emit("reply", {"reply": reply})
+            return "ok"
+
+        spec = ToolSpec(name="request_reply", category="effect")
+        runtime = self._build_runtime(["request_reply"], [request_reply], [spec])
+        result, record = ToolExecutor().execute(runtime, "request_reply", {"reply": "hi"})
+
+        self.assertFalse(result.ok)
+        self.assertFalse(record.ok)
+        self.assertIn("上下文", result.error or "")
+
     def test_annotated_parameter_description_reaches_schema(self) -> None:
         def say(
             reply: Annotated[str, "买家语言回复"],
@@ -591,6 +604,27 @@ class _PipelineCase(unittest.TestCase):
                 AgentPipelineInput(user_input="go", agent_preset=self._preset(tools=["reply"], requires_tool=True))
             )
         self.assertEqual(client.calls, 2)
+
+    def test_a_tool_choice_rejection_without_a_forced_choice_is_not_retried(self) -> None:
+        from agent_pipeline import LLMInvocationError
+
+        self._llm()
+        register_tool("reply", lambda text: text)
+
+        class _Rejecting:
+            def __init__(self):
+                self.calls = 0
+
+            def invoke(self, request):
+                self.calls += 1
+                raise LLMInvocationError("LLM API HTTP 400: tool_choice is not supported")
+
+        client = _Rejecting()
+        with self.assertRaises(LLMInvocationError):
+            AgentPipeline(llm_client=client).run(
+                AgentPipelineInput(user_input="go", agent_preset=self._preset(tools=["reply"]))
+            )
+        self.assertEqual(client.calls, 1)
 
 
 if __name__ == "__main__":
