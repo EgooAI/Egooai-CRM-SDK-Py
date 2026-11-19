@@ -59,9 +59,7 @@ def resolve_agent_preset(agent_preset: AgentPreset) -> AgentPresetRuntimeConfig:
         tool_names=tool_names,
         output_normalizer=output_normalizer_registry.get(agent_preset.apid),
         tool_specs=[tool_registry.spec(tool_name) for tool_name in tool_names],
-        # getattr keeps older AgentPreset instances (host fixtures built without the
-        # column) runnable: an absent column means "not required".
-        requires_tool=bool(getattr(agent_preset, "requires_tool", False)),
+        requires_tool=bool(agent_preset.requires_tool),
     )
 
 
