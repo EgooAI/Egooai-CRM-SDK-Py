@@ -31,10 +31,7 @@ class StaticLLMClient:
 
 def _tool_result_content(content: Any, ok: bool, error_text: Optional[str]) -> str:
     payload = content if ok else {"error": error_text}
-    try:
-        return json.dumps(payload, ensure_ascii=False)
-    except (TypeError, ValueError):
-        return json.dumps({"error": "tool result is not JSON serializable", "detail": str(payload)}, ensure_ascii=False)
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _exchanges_of(request_payload: LLMRequest) -> list[ToolExchange]:

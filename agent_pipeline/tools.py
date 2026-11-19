@@ -20,6 +20,16 @@ DEFAULT_MAX_RESULT_CHARS = 8000
 _TRUNCATION_NOTE = "\n…[结果已截断：原始长度 {size} 字符，请缩小查询范围]"
 
 
+def _json_safe(content: Any) -> Any:
+    """Returns a value the record, the model and context estimates can all serialize."""
+    if content is None or isinstance(content, (str, int, float, bool)):
+        return content
+    try:
+        return json.loads(json.dumps(content, ensure_ascii=False, default=str))
+    except (TypeError, ValueError):
+        return str(content)
+
+
 class _MissingToolContext(RuntimeError):
     """A tool declared a context parameter but the caller passed none."""
 
@@ -297,8 +307,10 @@ class ToolExecutor:
         replaced by that same note, so the model never receives a half-parsed
         object. ``original_chars`` is ``None`` when nothing was cut.
         """
-        if limit is None or content is None:
-            return content, None
+        if limit is None:
+            return _json_safe(content), None
+        if content is None:
+            return None, None
         if isinstance(content, str):
             text = content
             result_text = content
@@ -306,7 +318,9 @@ class ToolExecutor:
             try:
                 text = json.dumps(content, ensure_ascii=False)
             except (TypeError, ValueError):
-                text = str(content)
+                # Normalize once so the stored record and the model's request agree.
+                content = _json_safe(content)
+                text = json.dumps(content, ensure_ascii=False)
             result_text = content
         if len(text) <= limit:
             return result_text, None

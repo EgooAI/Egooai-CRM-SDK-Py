@@ -1,4 +1,6 @@
+import json
 import unittest
+from datetime import datetime
 from typing import Annotated
 
 from agent_pipeline import (
@@ -136,6 +138,20 @@ class ToolExecutorTestCase(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertFalse(record.ok)
         self.assertIn("上下文", result.error or "")
+
+    def test_non_json_tool_result_is_normalized_before_recording_and_requesting(self) -> None:
+        from agent_pipeline.llm import _tool_result_content
+
+        def stamps() -> dict:
+            return {"at": datetime(2026, 1, 2, 3, 4, 5)}
+
+        runtime = self._build_runtime(["stamps"], [stamps])
+        result, record = ToolExecutor().execute(runtime, "stamps", {})
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.content, {"at": "2026-01-02 03:04:05"})
+        self.assertEqual(record.content, result.content)
+        self.assertEqual(json.loads(_tool_result_content(record.content, True, None)), result.content)
 
     def test_annotated_parameter_description_reaches_schema(self) -> None:
         def say(

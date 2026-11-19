@@ -124,8 +124,8 @@ class ResourceManager:
             raise ResourceUnavailable("corrupt")
         stream.seek(0)
 
-    def open(self, resource_id, *, transaction=None):
-        """Returns a verified binary file handle owned by the caller."""
+    def _open(self, resource_id, *, transaction=None):
+        """Returns the verified record together with its stream."""
         record = self.get(resource_id, transaction=transaction)
         if record is None or record.state != "ready":
             raise ResourceUnavailable("missing")
@@ -135,10 +135,15 @@ class ResourceManager:
             raise ResourceUnavailable("missing") from None
         try:
             self._verify(stream, resource_id, record.size)
-            return stream
+            return record, stream
         except BaseException:
             stream.close()
             raise
+
+    def open(self, resource_id, *, transaction=None):
+        """Returns a verified binary file handle owned by the caller."""
+        _, stream = self._open(resource_id, transaction=transaction)
+        return stream
 
     def put(self, source, *, media_type="application/octet-stream", attributes=None,
             retain_until=0.0, max_bytes=None, transaction=None):
@@ -243,8 +248,11 @@ class ResourceManager:
         now = time.time() if now is None else now
         if ref is None or ref.namespace != namespace or (ref.expires_at is not None and ref.expires_at <= now):
             raise ResourceUnavailable("expired")
-        with self.open(ref.resource_id, transaction=transaction) as stream:
-            return self.get(ref.resource_id, transaction=transaction), stream.read()
+        record, stream = self._open(ref.resource_id, transaction=transaction)
+        try:
+            return record, stream.read()
+        finally:
+            stream.close()
 
     def unlink(self, reference_id, *, namespace, retain_until, transaction=None):
         if not math.isfinite(retain_until):
